@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { passwordSchema } from "./password-policy";
 
 export const accountSchema = z.object({
   fullName: z.string().min(2).max(120),
   email: z.string().email(),
-  password: z.string().min(8).max(200),
+  password: passwordSchema,
 });
 
 export const roleEnum = z.enum(["super_admin", "school_manager", "staff", "student", "parent"]);
@@ -107,14 +108,14 @@ export const resetRequestSchema = z.object({
 
 export const adminResetSchema = z.object({
   userId: z.string().uuid(),
-  password: z.string().min(8).max(200),
+  password: passwordSchema,
 });
 
 export const resolveResetRequestSchema = z
   .object({
     requestId: z.string().uuid(),
     action: z.enum(["approve", "reject"]),
-    password: z.string().min(8).max(200).optional(),
+    password: passwordSchema.optional(),
   })
   .refine((v) => v.action !== "approve" || !!v.password, {
     message: "A new password is required to approve a reset request.",
@@ -131,7 +132,7 @@ export const bulkImportSchema = z.object({
         fullName: z.string().min(2).max(120),
         email: z.string().email(),
         role: roleEnum,
-        password: z.string().min(8).max(200),
+        password: passwordSchema,
         username: z.string().max(60).optional(),
         department: z.string().max(120).optional(),
         className: z.string().max(60).optional(),
@@ -158,5 +159,5 @@ export const DEFAULT_LEVEL: Record<string, string> = {
 };
 
 export const changeOwnPasswordSchema = z.object({
-  password: z.string().min(8).max(200),
+  password: passwordSchema,
 });

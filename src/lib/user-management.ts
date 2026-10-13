@@ -1,3 +1,4 @@
+import { generateStrongPassword } from "./password-policy";
 import type { AccessLevel } from "@/lib/access";
 
 export const PERMISSIONS = [
@@ -72,11 +73,8 @@ export const CLASSES = [
 
 export const STATUSES = ["active", "suspended", "inactive"];
 
-export function generateSecurePassword(length = 12) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-  const values = new Uint32Array(length);
-  crypto.getRandomValues(values);
-  return Array.from(values, (v) => chars[v % chars.length]).join("");
+export function generateSecurePassword(length = 14) {
+  return generateStrongPassword(length);
 }
 
 export function toCsv(rows: Record<string, unknown>[]) {

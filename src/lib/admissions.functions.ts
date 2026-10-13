@@ -1,3 +1,4 @@
+import { generateStrongPassword } from "./password-policy";
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin, logAudit } from "@/lib/admin.server";
@@ -17,8 +18,7 @@ function studentLoginEmail(admissionNumber: string) {
 }
 
 function tempPassword() {
-  const chunk = () => Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `Sch-${chunk()}-${chunk()}`;
+  return generateStrongPassword(12);
 }
 
 type AdmissionInput = ReturnType<typeof createAdmissionSchema.parse>;
