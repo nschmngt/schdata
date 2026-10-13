@@ -47,6 +47,7 @@ import {
 } from "@/lib/admin.functions";
 import { ACCESS_LABEL, ROLES, ROLE_META, type Role } from "@/lib/access";
 import { useSession } from "@/hooks/useSession";
+import { passwordError } from "@/lib/password-policy";
 import { downloadCsv, generateSecurePassword, STATUSES } from "@/lib/user-management";
 import { AuditLogsPanel } from "./AuditLogsPanel";
 import { SecuritySettingsPanel } from "./SecuritySettingsPanel";
@@ -152,12 +153,13 @@ export function UserManagement() {
 
   const approveRequest = async (row: ResetRow) => {
     const password = window.prompt(
-      `New password for ${row.email} (min 8 characters)`,
+      `New password for ${row.email} (8+ chars, upper, lower, number, special)`,
       generateSecurePassword(),
     );
     if (!password) return;
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+    const pwErr = passwordError(password);
+    if (pwErr) {
+      toast.error(pwErr);
       return;
     }
     try {
@@ -259,12 +261,13 @@ export function UserManagement() {
   const doReset = async (row: AccountRow) => {
     const suggested = generateSecurePassword();
     const password = window.prompt(
-      `New password for ${row.email} (min 8 characters)`,
+      `New password for ${row.email} (8+ chars, upper, lower, number, special)`,
       suggested,
     );
     if (!password) return;
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+    const pwErr = passwordError(password);
+    if (pwErr) {
+      toast.error(pwErr);
       return;
     }
     try {

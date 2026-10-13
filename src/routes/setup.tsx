@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput, PasswordStrength } from "@/components/ui/password-input";
+import { passwordError } from "@/lib/password-policy";
+
 import { Label } from "@/components/ui/label";
 import { getSetupStatus, runInitialSetup } from "@/lib/admin.functions";
 
@@ -59,8 +62,9 @@ function SetupPage() {
       ["Super Administrator", superAdmin],
       ["School Manager", manager],
     ] as const) {
-      if (form.password.length < 8) {
-        toast.error(`${label}: password must be 8+ characters.`);
+      const pwErr = passwordError(form.password);
+      if (pwErr) {
+        toast.error(`${label}: ${pwErr}`);
         return;
       }
       if (form.password !== form.confirm) {
@@ -213,20 +217,22 @@ function AccountFields({
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}-pass`}>Password</Label>
-          <Input
+          <PasswordInput
             id={`${idPrefix}-pass`}
-            type="password"
+            autoComplete="new-password"
             required
             minLength={8}
+            aria-describedby={`${idPrefix}-pass-strength`}
             value={value.password}
             onChange={set("password")}
           />
+          <PasswordStrength id={`${idPrefix}-pass-strength`} password={value.password} />
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}-confirm`}>Confirm password</Label>
-          <Input
+          <PasswordInput
             id={`${idPrefix}-confirm`}
-            type="password"
+            autoComplete="new-password"
             required
             minLength={8}
             value={value.confirm}

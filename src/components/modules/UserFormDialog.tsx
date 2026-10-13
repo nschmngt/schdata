@@ -12,6 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PasswordInput, PasswordStrength } from "@/components/ui/password-input";
+import { passwordError } from "@/lib/password-policy";
+
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -249,8 +252,9 @@ export function UserFormDialog({
       }
     }
     if (!editing || form.password) {
-      if (form.password.length < 8) {
-        setError("Password must be at least 8 characters.");
+      const pwErr = passwordError(form.password);
+      if (pwErr) {
+        setError(pwErr);
         return;
       }
       if (form.password !== form.confirmPassword) {
@@ -520,20 +524,22 @@ export function UserFormDialog({
 
           <div className="space-y-2">
             <Label htmlFor="uf-pass">{editing ? "New password (optional)" : "Password"}</Label>
-            <Input
+            <PasswordInput
               id="uf-pass"
-              type="password"
               autoComplete="new-password"
               required={!editing}
+              aria-describedby="uf-pass-strength"
               value={form.password}
               onChange={(e) => set("password", e.target.value)}
             />
+            {(!editing || form.password) && (
+              <PasswordStrength id="uf-pass-strength" password={form.password} />
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="uf-pass2">Confirm password</Label>
-            <Input
+            <PasswordInput
               id="uf-pass2"
-              type="password"
               autoComplete="new-password"
               required={!editing}
               value={form.confirmPassword}

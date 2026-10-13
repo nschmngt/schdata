@@ -3,7 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { KeyRound, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput, PasswordStrength } from "@/components/ui/password-input";
+import { passwordError } from "@/lib/password-policy";
 import { Label } from "@/components/ui/label";
 import { changeOwnPassword } from "@/lib/admin.functions";
 
@@ -29,8 +30,9 @@ export function ForcePasswordChange({
       toast.error("The two passwords do not match.");
       return;
     }
-    if (password.length < 8) {
-      toast.error("Use at least 8 characters.");
+    const pwErr = passwordError(password);
+    if (pwErr) {
+      toast.error(pwErr);
       return;
     }
     setBusy(true);
@@ -58,20 +60,20 @@ export function ForcePasswordChange({
         <form className="mt-6 space-y-4" onSubmit={submit}>
           <div className="space-y-2">
             <Label htmlFor="new-password">New password</Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               autoComplete="new-password"
               required
+              aria-describedby="new-password-strength"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <PasswordStrength id="new-password-strength" password={password} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm password</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               autoComplete="new-password"
               required
               value={confirm}
