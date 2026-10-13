@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788331146947,
+      "tag": "0000_add_admission_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788333436774,
+      "tag": "0001_create_admissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788518799067,
+      "tag": "0002_create_system_configuration",
+      "breakpoints": true
+    }
+  ]
+}
