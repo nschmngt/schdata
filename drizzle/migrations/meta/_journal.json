@@ -15,6 +15,20 @@
       "when": 1791951579946,
       "tag": "0001_restrict_role_function_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791951587413,
+      "tag": "0002_reaffirm_table_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791951589579,
+      "tag": "0003_move_role_checks_to_private_schema",
+      "breakpoints": true
     }
   ]
 }
