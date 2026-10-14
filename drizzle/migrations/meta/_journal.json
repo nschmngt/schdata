@@ -43,6 +43,13 @@
       "when": 1791951604269,
       "tag": "0005_grant_super_admin_full_access",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791951618572,
+      "tag": "0006_add_staff_performance_schedules_and_offers",
+      "breakpoints": true
     }
   ]
 }
