@@ -71,6 +71,13 @@
       "when": 1791951688085,
       "tag": "0009_make_assignment_functions_security_definer",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791951696217,
+      "tag": "0010_revoke_assignment_function_execution",
+      "breakpoints": true
     }
   ]
 }
