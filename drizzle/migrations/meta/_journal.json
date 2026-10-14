@@ -92,6 +92,20 @@
       "when": 1791951704760,
       "tag": "0012_allow_staff_to_record_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791951713369,
+      "tag": "0013_add_student_assessments",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791951715696,
+      "tag": "0014_add_school_classes",
+      "breakpoints": true
     }
   ]
 }

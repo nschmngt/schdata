@@ -687,6 +687,47 @@ export type Database = {
           },
         ]
       }
+      school_classes: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          level_code: string
+          name: string
+          school_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          level_code: string
+          name: string
+          school_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          level_code?: string
+          name?: string
+          school_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_classes_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       school_types: {
         Row: {
           active: boolean
@@ -885,6 +926,56 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_assessments: {
+        Row: {
+          admission_id: string
+          assessment_type: string
+          class_name: string
+          created_at: string
+          id: string
+          out_of: number
+          remark: string
+          score: number
+          subject: string
+          term: string
+          updated_at: string
+        }
+        Insert: {
+          admission_id: string
+          assessment_type?: string
+          class_name?: string
+          created_at?: string
+          id?: string
+          out_of?: number
+          remark?: string
+          score?: number
+          subject: string
+          term?: string
+          updated_at?: string
+        }
+        Update: {
+          admission_id?: string
+          assessment_type?: string
+          class_name?: string
+          created_at?: string
+          id?: string
+          out_of?: number
+          remark?: string
+          score?: number
+          subject?: string
+          term?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_assessments_admission_id_fkey"
+            columns: ["admission_id"]
+            isOneToOne: false
+            referencedRelation: "admissions"
             referencedColumns: ["id"]
           },
         ]
