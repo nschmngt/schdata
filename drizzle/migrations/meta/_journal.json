@@ -29,6 +29,20 @@
       "when": 1791951589579,
       "tag": "0003_move_role_checks_to_private_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791951601656,
+      "tag": "0004_add_profile_fields_audit_and_security_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791951604269,
+      "tag": "0005_grant_super_admin_full_access",
+      "breakpoints": true
     }
   ]
 }
