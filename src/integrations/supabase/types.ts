@@ -253,6 +253,112 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_config_audit: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          created_at: string
+          description: string
+          details: Json
+          id: string
+          school_id: string | null
+          section_key: string
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          description?: string
+          details?: Json
+          id?: string
+          school_id?: string | null
+          section_key: string
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          created_at?: string
+          description?: string
+          details?: Json
+          id?: string
+          school_id?: string | null
+          section_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_config_audit_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_config_sections: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          area_key: string
+          created_at: string
+          created_by: string | null
+          effective_from: string | null
+          effective_to: string | null
+          id: string
+          notes: string
+          payload: Json
+          school_id: string
+          section_key: string
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          area_key: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          notes?: string
+          payload?: Json
+          school_id: string
+          section_key: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          area_key?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          notes?: string
+          payload?: Json
+          school_id?: string
+          section_key?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_config_sections_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       finance_expenses: {
         Row: {
           amount: number
@@ -380,6 +486,115 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_reference_items: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          description: string
+          id: string
+          list_key: string
+          metadata: Json
+          name: string
+          parent_code: string | null
+          school_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          description?: string
+          id?: string
+          list_key: string
+          metadata?: Json
+          name: string
+          parent_code?: string | null
+          school_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          description?: string
+          id?: string
+          list_key?: string
+          metadata?: Json
+          name?: string
+          parent_code?: string | null
+          school_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_reference_items_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_rules: {
+        Row: {
+          actions: Json
+          active: boolean
+          conditions: Json
+          created_at: string
+          description: string
+          effective_from: string | null
+          effective_to: string | null
+          id: string
+          name: string
+          priority: number
+          rule_key: string
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          actions?: Json
+          active?: boolean
+          conditions?: Json
+          created_at?: string
+          description?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          name: string
+          priority?: number
+          rule_key: string
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          actions?: Json
+          active?: boolean
+          conditions?: Json
+          created_at?: string
+          description?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string
+          name?: string
+          priority?: number
+          rule_key?: string
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_rules_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
             referencedColumns: ["id"]
           },
         ]
@@ -1317,6 +1532,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_public_branding: {
+        Args: never
+        Returns: {
+          logo_url: string
+          name: string
+          tagline: string
+        }[]
+      }
       next_generated_number: { Args: { _kind: string }; Returns: string }
     }
     Enums: {
