@@ -253,6 +253,103 @@ export type Database = {
         }
         Relationships: []
       }
+      numbering_counters: {
+        Row: {
+          kind: string
+          last_value: number
+          school_id: string
+          updated_at: string
+          year_key: string
+        }
+        Insert: {
+          kind: string
+          last_value?: number
+          school_id: string
+          updated_at?: string
+          year_key: string
+        }
+        Update: {
+          kind?: string
+          last_value?: number
+          school_id?: string
+          updated_at?: string
+          year_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "numbering_counters_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      numbering_settings: {
+        Row: {
+          admission_format: string
+          admission_sequence_digits: number
+          admission_sequence_start: number
+          admission_total_digits: number
+          admission_year_digits: number
+          created_at: string
+          employee_allocation_mode: string
+          employee_format: string
+          employee_sequence_digits: number
+          employee_sequence_start: number
+          employee_total_digits: number
+          employee_year_digits: number
+          id: string
+          school_code: string
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          admission_format?: string
+          admission_sequence_digits?: number
+          admission_sequence_start?: number
+          admission_total_digits?: number
+          admission_year_digits?: number
+          created_at?: string
+          employee_allocation_mode?: string
+          employee_format?: string
+          employee_sequence_digits?: number
+          employee_sequence_start?: number
+          employee_total_digits?: number
+          employee_year_digits?: number
+          id?: string
+          school_code?: string
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          admission_format?: string
+          admission_sequence_digits?: number
+          admission_sequence_start?: number
+          admission_total_digits?: number
+          admission_year_digits?: number
+          created_at?: string
+          employee_allocation_mode?: string
+          employee_format?: string
+          employee_sequence_digits?: number
+          employee_sequence_start?: number
+          employee_total_digits?: number
+          employee_year_digits?: number
+          id?: string
+          school_code?: string
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "numbering_settings_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       offer_letters: {
         Row: {
           candidate_email: string
@@ -963,7 +1060,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      next_generated_number: { Args: { _kind: string }; Returns: string }
     }
     Enums: {
       access_level:
