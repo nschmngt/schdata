@@ -134,6 +134,20 @@
       "when": 1791951758258,
       "tag": "0018_add_public_branding_function",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791951777916,
+      "tag": "0019_add_school_address_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791951780041,
+      "tag": "0020_restrict_configuration_and_assignment_function_access",
+      "breakpoints": true
     }
   ]
 }

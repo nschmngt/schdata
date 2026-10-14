@@ -977,45 +977,60 @@ export type Database = {
         Row: {
           active: boolean
           code: string
+          community: string
           country: string
           created_at: string
           currency: string
+          district: string
+          gps_address: string
           id: string
           level_codes: string[]
           locale: string
           name: string
+          postal_address: string
           region: string
           timezone: string
+          town: string
           type_code: string
           updated_at: string
         }
         Insert: {
           active?: boolean
           code: string
+          community?: string
           country?: string
           created_at?: string
           currency?: string
+          district?: string
+          gps_address?: string
           id?: string
           level_codes?: string[]
           locale?: string
           name: string
+          postal_address?: string
           region?: string
           timezone?: string
+          town?: string
           type_code?: string
           updated_at?: string
         }
         Update: {
           active?: boolean
           code?: string
+          community?: string
           country?: string
           created_at?: string
           currency?: string
+          district?: string
+          gps_address?: string
           id?: string
           level_codes?: string[]
           locale?: string
           name?: string
+          postal_address?: string
           region?: string
           timezone?: string
+          town?: string
           type_code?: string
           updated_at?: string
         }
