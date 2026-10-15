@@ -16,7 +16,7 @@
 - [x] Academic calendar as the single lifecycle source for all modules and finance config (one page per area)
 - [x] Archives module at /portal/archives
 - [x] Restructure uploaded offer-letter template for staff and school managers after onboarding, with preview and print.
-- [ ] Verify appointment-letter preview and printing with saved employee records — blocked: no authenticated session is available for this project's existing account service.
+- [ ] Verify appointment-letter printing end to end — blocked: needs a real school record (System Configuration); the preview itself now opens for a saved staff record, names the signing administrator and states "No active school is configured" instead of failing.
 
 ## Configuration domains (registry: six domains, each module governed by exactly one)
 - [x] Stage 0 — Domain registry, four placeholder pages, rename System → System & Platform Configuration
