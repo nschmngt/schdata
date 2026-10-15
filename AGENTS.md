@@ -9,6 +9,7 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
+- Schema changes go through the Lovable migration tool (journal: drizzle/migrations); the read-only SQL runner rejects DDL - one apply path, no half-applied backend.
 - Academic calendar (terms vs semesters, dates, auto lifecycle) lives in tenant_settings.features.__academic_calendar via src/lib/academic-calendar.ts; every date/term field uses PeriodDateInput/PeriodSelect (src/components/portal/PeriodFields.tsx) and every dated server write calls assertPeriodOpen — one central calendar, no per-module date logic.
 - Financial list items never store their own dates/lifecycle: they carry a coverage scope (+ optional period) resolved by resolveCoverage in src/lib/academic-calendar.ts; each Financial Configuration area renders all its sections on one page — keeps the calendar the only lifecycle source.
 - Archives derive record state from the academic calendar + retention-policies rules via the ARCHIVE_SOURCES registry in src/lib/archives.ts; records are never copied or auto-deleted — one registry entry per source, no new tables.
