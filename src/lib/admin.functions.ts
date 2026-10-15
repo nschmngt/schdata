@@ -155,15 +155,25 @@ async function syncTeachingAssignments(
   classes: string[] | undefined,
   subjects: string[] | undefined,
 ) {
+  const isTeacher = (position ?? "").trim().toLowerCase() === "teacher";
+  let rows: { teacher_id: string; class_name: string; subject: string }[] = [];
+  if (isTeacher && (classes?.length ?? 0) > 0) {
+    const { matchTeachingPairs, teachingLevelError } = await import("@/lib/teaching-levels");
+    const [{ data: cls }, { data: subs }] = await Promise.all([
+      client.from("school_classes").select("name, level_code").eq("active", true),
+      client.from("subjects").select("name, level_code").eq("active", true),
+    ]);
+    const result = matchTeachingPairs(
+      classes ?? [],
+      subjects ?? [],
+      (cls ?? []).map((c) => ({ name: c.name, levelCode: c.level_code })),
+      (subs ?? []).map((s) => ({ name: s.name, levelCode: s.level_code })),
+    );
+    const problem = teachingLevelError(result);
+    if (problem) throw new Error(problem);
+    rows = result.pairs.map((p) => ({ teacher_id: teacherId, ...p }));
+  }
   await client.from("teaching_assignments").delete().eq("teacher_id", teacherId);
-  if ((position ?? "").trim().toLowerCase() !== "teacher") return;
-  const rows = [...new Set(classes ?? [])].flatMap((className) =>
-    [...new Set(subjects ?? [])].map((subject) => ({
-      teacher_id: teacherId,
-      class_name: className,
-      subject,
-    })),
-  );
   if (rows.length === 0) return;
   const { error } = await client.from("teaching_assignments").insert(rows);
   if (error) throw new Error(error.message);
