@@ -487,6 +487,19 @@ export const getSubjectOptions = createServerFn({ method: "GET" })
     return [...new Set((data ?? []).filter((s) => s.active !== false).map((s) => s.name))];
   });
 
+/** Active subjects with the education level each belongs to. */
+export const getSubjectCatalog = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("subjects")
+      .select("name, level_code, active")
+      .eq("active", true)
+      .order("name");
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((s) => ({ name: s.name, levelCode: s.level_code }));
+  });
+
 /* ------------------------------ classes ------------------------------ */
 
 /**
@@ -537,6 +550,19 @@ export const updateSchoolClass = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId);
     const { id, ...rest } = data;
+    if (rest.levelCode !== undefined) {
+      const { data: cls } = await context.supabase
+        .from("school_classes")
+        .select("school_id")
+        .eq("id", id)
+        .maybeSingle();
+      const { data: school } = cls
+        ? await context.supabase.from("schools").select("level_codes").eq("id", cls.school_id).maybeSingle()
+        : { data: null };
+      if (!school || !(school.level_codes ?? []).includes(rest.levelCode)) {
+        throw new Error("That education level is not offered by this school.");
+      }
+    }
     const { error } = await context.supabase
       .from("school_classes")
       .update({
