@@ -30,3 +30,4 @@
 - Learner attendance/score summaries are computed only by src/lib/student-summary.ts, grouped by academic-calendar periods; long lists use the shared usePaged/Pager in src/components/portal/Paged.tsx.
 - School name/tagline/logo are read only via get_public_branding() (src/lib/branding.*, useSchoolName, router context for titles); tables stay admin-only — exposes the name without widening table access.
 - The password policy lives only in src/lib/password-policy.ts (rules, zod schema, generator) and new-password fields use PasswordInput/PasswordStrength — client and server enforce the same rules.
+- Teaching pairs are validated against education levels via src/lib/teaching-levels.ts (form filters, server enforces in syncTeachingAssignments) - a subject is only taught in classes of its own level.
