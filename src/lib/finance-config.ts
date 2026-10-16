@@ -13,7 +13,7 @@ import { EXPENSE_CATEGORIES, FEE_TYPES, INCOME_CATEGORIES } from "./finance";
 
 export type SectionKind = "settings" | "list" | "rules" | "audit";
 
-export type FieldType = "text" | "textarea" | "number" | "toggle" | "select" | "date" | "scope" | "period";
+export type FieldType = "text" | "textarea" | "number" | "toggle" | "select" | "date" | "scope" | "period" | "levels";
 
 export interface FieldDef {
   key: string;
@@ -98,7 +98,7 @@ const list = (
   key,
   name,
   kind: "list",
-  ...(itemFields ? { itemFields } : {}),
+  ...(itemFields ? { itemFields: withLevelScope(itemFields) } : {}),
   ...(consumers ? { consumers } : {}),
 });
 
@@ -110,6 +110,19 @@ const rules = (key: string, name: string, consumers?: string[]): SectionDef => (
 });
 
 const AMOUNT_FIELD: FieldDef = { key: "amount", label: "Amount", type: "number" };
+/** Education levels an item applies to, with optional per-level amounts (see education-levels.ts). */
+export const LEVELS_FIELD: FieldDef = {
+  key: "levels",
+  label: "Education levels",
+  type: "levels",
+  help: "Leave all unticked to apply to every level. A level amount overrides the base amount.",
+};
+/** Every priced list item is education-level aware — added once here, not per section. */
+function withLevelScope(fields: FieldDef[]): FieldDef[] {
+  return fields.some((f) => f.key === "amount") && !fields.some((f) => f.type === "levels")
+    ? [...fields, LEVELS_FIELD]
+    : fields;
+}
 /**
  * Lifecycle comes only from the academic calendar: items store a coverage
  * scope (+ optional period name); dates and status are resolved, never stored.
