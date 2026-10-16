@@ -490,8 +490,9 @@ export function UserFormDialog({
                   <p className="mb-2 text-sm font-medium">Subjects taught</p>
                   {subjectOptions.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No subjects have been set up yet — add them under System Configuration →
-                      Subjects.
+                      {form.teachingClasses.length === 0
+                        ? "Pick a class first — only subjects of that class's education level are offered."
+                        : "No subjects are set up for the education level of the selected classes — add them under System Configuration → Subjects."}
                     </p>
                   ) : (
                     <div className="grid max-h-48 gap-2 overflow-y-auto">
