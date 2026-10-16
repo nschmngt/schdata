@@ -1,23 +1,24 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getSubjectOptions } from "@/lib/config.functions";
+import { getSubjectCatalog } from "@/lib/config.functions";
+import type { LevelRef } from "@/lib/teaching-levels";
 
 /**
- * Subject names configured under System Configuration → Subjects. Single
- * source of truth for every module that needs to pick a subject.
+ * Subjects configured under System Configuration → Subjects, each tied to its
+ * education level. Single source of truth for every module that picks a subject.
  */
-export function useSubjectOptions(): { subjects: string[]; loading: boolean } {
-  const load = useServerFn(getSubjectOptions);
-  const [subjects, setSubjects] = useState<string[]>([]);
+export function useSubjectOptions(): { subjects: string[]; catalog: LevelRef[]; loading: boolean } {
+  const load = useServerFn(getSubjectCatalog);
+  const [catalog, setCatalog] = useState<LevelRef[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     void load()
       .then((rows) => {
-        if (active) setSubjects(rows as string[]);
+        if (active) setCatalog(rows as LevelRef[]);
       })
-      .catch(() => setSubjects([]))
+      .catch(() => setCatalog([]))
       .finally(() => {
         if (active) setLoading(false);
       });
@@ -26,5 +27,5 @@ export function useSubjectOptions(): { subjects: string[]; loading: boolean } {
     };
   }, []);
 
-  return { subjects, loading };
+  return { subjects: [...new Set(catalog.map((s) => s.name))], catalog, loading };
 }

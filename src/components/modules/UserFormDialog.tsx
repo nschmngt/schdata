@@ -140,6 +140,7 @@ import { useSubjectOptions } from "@/hooks/useSubjectOptions";
 import { useServerFn } from "@tanstack/react-start";
 import { getTeachingAssignments } from "@/lib/teaching.functions";
 import { isTeacherPosition, splitAssignments } from "@/lib/teaching";
+import { matchTeachingPairs, teachingLevelError } from "@/lib/teaching-levels";
 
 export function UserFormDialog({
   open,
@@ -161,8 +162,8 @@ export function UserFormDialog({
   const { symbol: currencySymbol } = useFinanceConfig();
   const editing = Boolean(account);
   const { positions, departments } = useTenantOptions();
-  const { names: configuredClasses } = useSchoolClasses();
-  const { subjects: subjectOptions } = useSubjectOptions();
+  const { names: configuredClasses, classes: classCatalog } = useSchoolClasses();
+  const { catalog: subjectCatalog } = useSubjectOptions();
   const loadTeaching = useServerFn(getTeachingAssignments);
   const classOptions = configuredClasses.length ? configuredClasses : CLASSES;
   const [form, setForm] = useState<UserFormValues>(emptyForm());
@@ -223,6 +224,21 @@ export function UserFormDialog({
 
   const teaching = isTeacherPosition(form.position) && PAYROLL_ROLES.includes(form.role);
 
+  /* Subjects are offered only for the education levels of the selected classes. */
+  const levelOfClass = new Map(classCatalog.map((c) => [c.name, c.levelCode]));
+  const selectedLevels = new Set(
+    form.teachingClasses.map((c) => levelOfClass.get(c)).filter(Boolean) as string[],
+  );
+  const subjectOptions = [
+    ...new Set(subjectCatalog.filter((s) => selectedLevels.has(s.levelCode)).map((s) => s.name)),
+  ];
+  const levelMatch = matchTeachingPairs(
+    form.teachingClasses,
+    form.teachingSubjects,
+    classCatalog,
+    subjectCatalog,
+  );
+
   const changePosition = (position: string) =>
     setForm((f) => ({
       ...f,
@@ -243,6 +259,13 @@ export function UserFormDialog({
     if (teaching && (form.teachingClasses.length === 0 || form.teachingSubjects.length === 0)) {
       setError("A teacher needs at least one class and one subject to teach.");
       return;
+    }
+    if (teaching && classCatalog.length > 0) {
+      const levelProblem = teachingLevelError(levelMatch);
+      if (levelProblem) {
+        setError(levelProblem);
+        return;
+      }
     }
     if (PAYROLL_ROLES.includes(form.role)) {
       const salary = Number(form.salary);
