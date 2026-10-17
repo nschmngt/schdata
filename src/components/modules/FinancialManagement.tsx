@@ -1,6 +1,8 @@
 import { Pager, usePaged } from "@/components/portal/Paged";
 import { PeriodDateInput, PeriodSelect } from "@/components/portal/PeriodFields";
 import { useAcademicCalendar } from "@/hooks/useAcademicCalendar";
+import { amountForLevel, appliesToLevel, levelOfClass } from "@/lib/education-levels";
+import { useSchoolClasses } from "@/hooks/useSchoolClasses";
 import { coverageApplies, periodEnd, periodLabel } from "@/lib/academic-calendar";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -260,6 +262,7 @@ export function FinancialManagement() {
                     data: {
                       admissionId: v.admissionId,
                       term: v.term,
+                      feeCode: v.feeCode,
                       amountDue: v.amountDue,
                       amountPaid: 0,
                       dueDate: v.dueDate || null,
@@ -768,11 +771,12 @@ function FeeDialog({
 }: {
   feeTypes: { value: string; label: string }[];
   feeItems: { code: string; name: string; metadata: Record<string, unknown> | null }[];
-  students: { id: string; student_name: string; admission_number: string | null }[];
+  students: { id: string; student_name: string; admission_number: string | null; class_admitted: string }[];
   busy: boolean;
   onSubmit: (v: {
     admissionId: string;
     term: string;
+    feeCode: string | null;
     amountDue: number;
     dueDate: string;
     status: "pending" | "paid" | "overdue";
@@ -785,15 +789,22 @@ function FeeDialog({
   const [term, setTerm] = useState<string>(feeTypes[0]?.label ?? "");
   const [amountDue, setAmountDue] = useState("");
   const activePeriod = period || cal.current?.name || "";
-  // Fee categories configured for this term/semester (coverage resolved from the calendar).
+  const { classes } = useSchoolClasses();
+  const student = students.find((s) => s.id === admissionId);
+  const level = levelOfClass(classes, student?.class_admitted);
+  // Fee categories for this term/semester and the learner's education level.
   const availableTypes = feeTypes.filter((t) => {
     const item = feeItems.find((i) => i.code === t.value);
-    return !item || coverageApplies(item.metadata?.["scope"] as string, item.metadata?.["period"] as string, activePeriod);
+    return (
+      !item ||
+      (coverageApplies(item.metadata?.["scope"] as string, item.metadata?.["period"] as string, activePeriod) &&
+        appliesToLevel(item.metadata?.["levels"], level))
+    );
   });
-  const pickType = (label: string) => {
+  const pickType = (label: string, lvl = level) => {
     setTerm(label);
     const item = feeItems.find((i) => i.name === label);
-    const amt = Number(item?.metadata?.["amount"] ?? 0);
+    const amt = amountForLevel(item?.metadata, lvl);
     if (amt > 0) setAmountDue(String(amt));
   };
   const [dueDate, setDueDate] = useState("");
@@ -814,7 +825,18 @@ function FeeDialog({
         </DialogHeader>
         <div className="space-y-4">
           <Field label="Student">
-            <Select value={admissionId} onValueChange={setAdmissionId}>
+            <Select
+              value={admissionId}
+              onValueChange={(id) => {
+                setAdmissionId(id);
+                const lvl = levelOfClass(classes, students.find((s) => s.id === id)?.class_admitted);
+                const item = feeItems.find((i) => i.name === term);
+                if (item && !appliesToLevel(item.metadata?.["levels"], lvl)) {
+                  setTerm("");
+                  setAmountDue("");
+                } else if (term) pickType(term, lvl);
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select a student" />
               </SelectTrigger>
@@ -882,11 +904,12 @@ function FeeDialog({
         </div>
         <DialogFooter>
           <Button
-            disabled={busy || !admissionId}
+            disabled={busy || !admissionId || !term}
             onClick={async () => {
               const ok = await onSubmit({
                 admissionId,
                 term: periodLabel(period || cal.current?.name || "", term),
+                feeCode: feeItems.find((i) => i.name === term)?.code ?? null,
                 amountDue: Number(amountDue || 0),
                 dueDate: effectiveDue,
                 status,

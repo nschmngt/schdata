@@ -18,6 +18,7 @@ import { PeriodSelect } from "@/components/portal/PeriodFields";
 import { useAcademicRules } from "@/hooks/useAcademicRules";
 import { useSchoolClasses } from "@/hooks/useSchoolClasses";
 import { useSubjectOptions } from "@/hooks/useSubjectOptions";
+import { subjectsForClass } from "@/lib/education-levels";
 import { activeAssessmentTypes, categoryOf, CATEGORY_LABEL, num, percentOf } from "@/lib/academic-rules";
 import { getMyTeachingScope } from "@/lib/teaching.functions";
 import { Pager, usePaged } from "@/components/portal/Paged";
@@ -75,8 +76,8 @@ export function AssessmentManagement() {
   const loadScope = useServerFn(getMyTeachingScope);
   const rules = useAcademicRules();
   const types = activeAssessmentTypes(rules);
-  const { names: allClasses } = useSchoolClasses();
-  const { subjects: allSubjects } = useSubjectOptions();
+  const { names: allClasses, classes: classCatalog } = useSchoolClasses();
+  const { subjects: allSubjects, catalog: subjectCatalog } = useSubjectOptions();
   const [scope, setScope] = useState<Awaited<ReturnType<typeof getMyTeachingScope>> | null>(null);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [rows, setRows] = useState<AssessmentRow[]>([]);
@@ -116,7 +117,9 @@ export function AssessmentManagement() {
   const subjectOptions =
     scope && !scope.isAdmin
       ? [...new Set(scope.pairs.filter((p) => !form.className || p.class_name === form.className).map((p) => p.subject))]
-      : allSubjects;
+      : form.className
+        ? subjectsForClass(subjectCatalog, classCatalog, form.className)
+        : allSubjects;
   const classStudents = form.className ? students.filter((s) => s.class_admitted === form.className) : students;
   const defaultOutOf = num(rules, "assessment", "default-out-of");
 

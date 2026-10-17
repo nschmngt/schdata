@@ -34,6 +34,8 @@ export const payrollSchema = z.object({
 export const feeSchema = z.object({
   admissionId: z.string().uuid(),
   term: text(2, 60),
+  /** Configured fee category code; checked against the learner's education level. */
+  feeCode: z.string().trim().max(60).nullable().optional(),
   amountDue: amount,
   amountPaid: amount.default(0),
   dueDate: date.nullable().optional(),

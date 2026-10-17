@@ -3,6 +3,8 @@ import { assertPeriodOpen, calendarPeriodEnd } from "@/lib/academic-calendar.ser
 import { periodOfLabel } from "@/lib/academic-calendar";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin, logAudit } from "@/lib/admin.server";
+import { classLevelCode } from "@/lib/education-levels.server";
+import { levelScopeError } from "@/lib/education-levels";
 import {
   deleteSchema,
   expenseSchema,
@@ -187,6 +189,23 @@ export const addStudentFee = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertPeriodOpen(context.supabase, { period: periodOfLabel(data.term) });
     await assertAdmin(context.supabase, context.userId);
+    if (data.feeCode) {
+      const [{ data: item }, { data: learner }] = await Promise.all([
+        context.supabase
+          .from("finance_reference_items")
+          .select("name, metadata")
+          .eq("list_key", "fee-categories")
+          .eq("code", data.feeCode)
+          .limit(1)
+          .maybeSingle(),
+        context.supabase.from("admissions").select("class_admitted").eq("id", data.admissionId).maybeSingle(),
+      ]);
+      if (item) {
+        const level = await classLevelCode(context.supabase, learner?.class_admitted);
+        const err = levelScopeError(item.name, (item.metadata as Record<string, unknown> | null)?.["levels"], level);
+        if (err) throw new Error(err);
+      }
+    }
     const { error } = await context.supabase.from("student_fees").insert({
       admission_id: data.admissionId,
       term: data.term,

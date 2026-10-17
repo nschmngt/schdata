@@ -600,10 +600,13 @@ export const getSchoolClasses = createServerFn({ method: "GET" })
       .eq("active", true)
       .order("sort_order", { ascending: true });
     if (error) throw new Error(error.message);
+    const { data: levels } = await context.supabase.from("education_levels").select("code, name");
+    const levelName = new Map((levels ?? []).map((l) => [l.code, l.name]));
     return (data ?? []).map((c) => ({
       id: c.id,
       schoolId: c.school_id,
       levelCode: c.level_code,
+      levelName: levelName.get(c.level_code) ?? c.level_code,
       name: c.name,
     }));
   });
