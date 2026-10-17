@@ -148,6 +148,13 @@
       "when": 1791951780041,
       "tag": "0020_restrict_configuration_and_assignment_function_access",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792207617594,
+      "tag": "0021_branding_logo_upload",
+      "breakpoints": true
     }
   ]
 }
