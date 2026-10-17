@@ -325,6 +325,8 @@ export const saveBranding = createServerFn({ method: "POST" })
         school_id: data.schoolId,
         display_name: data.displayName ?? "",
         tagline: data.tagline ?? "",
+        motto: data.motto ?? "",
+        established_year: data.establishedYear ?? "",
         logo_url: data.logoUrl ?? null,
         primary_color: data.primaryColor,
         accent_color: data.accentColor,

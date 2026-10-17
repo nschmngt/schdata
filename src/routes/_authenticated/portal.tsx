@@ -1,3 +1,5 @@
+import { SchoolLogo } from "@/components/branding/SchoolLogo";
+import { AvatarPicker } from "@/components/branding/UserAvatar";
 import { brandTitle } from "@/lib/branding.functions";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useSchoolName } from "@/hooks/useSchoolName";
@@ -100,7 +102,7 @@ function PortalLayout() {
             <Menu className="size-5" aria-hidden />
           </Button>
           <Link to="/portal" className="flex items-center gap-2.5">
-            <School className="size-6" aria-hidden />
+            <SchoolLogo size="sm" />
             <span className="text-lg font-semibold">{schoolName.name}</span>
           </Link>
           <div className="ml-auto flex items-center gap-4">
@@ -110,6 +112,7 @@ function PortalLayout() {
                 {meta.label} · {ACCESS_LABEL[profile.access_level]}
               </p>
             </div>
+            <AvatarPicker />
             <Button
               variant="ghost"
               className="text-ink-foreground hover:bg-white/10"

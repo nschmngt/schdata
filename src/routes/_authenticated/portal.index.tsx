@@ -1,3 +1,4 @@
+import { SchoolLogo } from "@/components/branding/SchoolLogo";
 import { useSchoolName } from "@/hooks/useSchoolName";
 import { brandTitle } from "@/lib/branding.functions";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -66,16 +67,19 @@ function PortalHome() {
   return (
     <div className="space-y-6">
       <section className="surface overflow-hidden">
-        <div className="bg-ink px-6 py-7 text-ink-foreground">
+        <div className="relative flex items-center gap-5 overflow-hidden bg-ink px-6 py-7 text-ink-foreground">
+          <SchoolLogo size="lg" className="hidden sm:inline-block" />
+          <div>
           {school.name && (
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              {school.name}
+              {school.name}{school.tagline ? ` · ${school.tagline}` : ""}
             </p>
           )}
           <h1 className="text-2xl font-bold">Welcome, {profile.full_name || profile.email}</h1>
           <p className="mt-1 text-sm text-ink-muted">
             This is your centralized portal. Everything you are permitted to use lives here.
           </p>
+          </div>
         </div>
         <dl className="grid gap-px bg-border sm:grid-cols-3">
           <Stat label="Role" value={meta.label} />

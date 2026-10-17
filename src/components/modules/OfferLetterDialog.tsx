@@ -1,3 +1,4 @@
+import { LogoWatermark, SchoolLogo } from "@/components/branding/SchoolLogo";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Printer } from "lucide-react";
@@ -76,10 +77,11 @@ export function OfferLetterDialog({ target, onClose }: { target: LetterTarget | 
         {!data.schools.length ? <p role="alert">No active school is configured.</p> : null}
         {!data.signers.length ? <p role="alert">No active super administrator is available to sign.</p> : null}
         <div className="flex justify-end"><Button onClick={print} disabled={!ready}><Printer className="mr-2 size-4" />Print / Save PDF</Button></div>
-        {ready && school && signer && employee && target && employmentType ? <article ref={letterRef} className="appointment-letter" aria-label="Appointment letter">
+        {ready && school && signer && employee && target && employmentType ? <article ref={letterRef} className="appointment-letter" style={{ position: "relative" }} aria-label="Appointment letter">
+          <LogoWatermark />
           <header className="appointment-letter-head">
             <div><p>In replying, please quote this reference and date.</p><p className="mt-3"><strong>My Ref. No.:</strong><br />{offerReference(target.kind, school.numbering, school.sequence, employee.onboardedAt)}</p><p className="mt-2">Your Ref. No.: __________________</p></div>
-            {school.logoUrl ? <img src={school.logoUrl} alt={`${school.name} emblem`} className="appointment-emblem" /> : null}
+            <SchoolLogo size="document" className="appointment-emblem" />
             <div><h2>{school.name}</h2><p>GHANA EDUCATION SERVICE</p>{school.postal_address ? <p>{school.postal_address}</p> : null}<p>{[school.community, school.town, school.district, school.region].filter(Boolean).join(", ")}</p>{school.gps_address ? <p>GPS: {school.gps_address}</p> : null}<p>Date: {letterDate(employee.onboardedAt)}</p><p>Email: {signer.email}</p></div>
           </header>
           <div className="appointment-values"><strong>Our GES Core Values</strong><p>Professionalism · Collaboration · Equity · Innovation · Excellence · Discipline · Integrity</p></div>

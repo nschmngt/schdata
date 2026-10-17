@@ -1,3 +1,5 @@
+import { SchoolLogo } from "@/components/branding/SchoolLogo";
+import { useSchoolName } from "@/hooks/useSchoolName";
 import { brandTitle } from "@/lib/branding.functions";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -72,10 +74,10 @@ function Landing() {
       <header className="bg-ink text-ink-foreground">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-6 py-12 text-center">
           <div className="flex items-center gap-3">
-            <School className="size-9" aria-hidden />
-            <h1 className="text-4xl font-bold sm:text-5xl">School Management System</h1>
+            <SchoolLogo size="lg" />
+            <h1 className="text-4xl font-bold sm:text-5xl">{brand.name}</h1>
           </div>
-          <p className="text-ink-muted">Comprehensive Educational Management Platform</p>
+          <p className="text-ink-muted">{brand.tagline || "Comprehensive Educational Management Platform"}</p>
         </div>
       </header>
 

@@ -1,3 +1,4 @@
+import { SchoolLogo } from "@/components/branding/SchoolLogo";
 import { brandTitle } from "@/lib/branding.functions";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { Lock, Construction } from "lucide-react";
@@ -88,8 +89,8 @@ function ModulePage() {
           <Icon className="size-6" aria-hidden />
         </span>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {school.name} · {mod.category}
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <SchoolLogo size="xs" /> {school.name} · {mod.category}
           </p>
           <h1 className="text-2xl font-bold">{mod.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{mod.description}</p>

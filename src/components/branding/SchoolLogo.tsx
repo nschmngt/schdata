@@ -1,4 +1,5 @@
 import { useId } from "react";
+import * as React from "react";
 import { useSchoolName } from "@/hooks/useSchoolName";
 import { cn } from "@/lib/utils";
 import { DEFAULT_BRAND_COLORS } from "@/lib/config";
@@ -32,24 +33,30 @@ export function SchoolLogo({
   size = "md",
   className,
   brand,
+  style,
 }: {
   size?: LogoSize;
   className?: string;
+  style?: React.CSSProperties;
   /** Override (e.g. the unsaved branding preview); defaults to the saved branding. */
   brand?: LogoBrand;
 }) {
   const saved = useSchoolName();
   const b = brand ?? saved;
   const cls = cn("inline-block shrink-0 object-contain", SIZE[size], className);
-  if (b.logoUrl) return <img src={b.logoUrl} alt={`${b.name} logo`} className={cls} />;
-  return <SchoolCrest brand={b} className={cls} compact={size === "xs" || size === "sm"} />;
+  if (b.logoUrl) return <img src={b.logoUrl} alt={`${b.name} logo`} className={cls} style={style} />;
+  return <SchoolCrest brand={b} className={cls} style={style} compact={size === "xs" || size === "sm"} />;
 }
 
 /** Full-page faint watermark for official documents. Place inside a `relative` container. */
 export function LogoWatermark({ className }: { className?: string }) {
   return (
-    <div aria-hidden className={cn("pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.06] print:opacity-[0.08]", className)}>
-      <SchoolLogo size="xl" className="size-[60%] max-h-[140mm] max-w-[140mm]" />
+    <div
+      aria-hidden
+      className={className}
+      style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0.07, pointerEvents: "none", zIndex: 0 }}
+    >
+      <SchoolLogo size="xl" className="" style={{ width: "55%", height: "auto", maxWidth: "140mm" }} />
     </div>
   );
 }
@@ -68,7 +75,7 @@ export function SchoolLockup({ size = "sm", className, showTagline = true }: { s
   );
 }
 
-function SchoolCrest({ brand, className, compact }: { brand: LogoBrand; className: string; compact: boolean }) {
+function SchoolCrest({ brand, className, compact, style }: { brand: LogoBrand; className: string; compact: boolean; style?: React.CSSProperties | undefined }) {
   const id = useId().replace(/:/g, "");
   const primary = brand.primaryColor || DEFAULT_BRAND_COLORS.primary;
   const accent = brand.accentColor || DEFAULT_BRAND_COLORS.accent;
@@ -81,7 +88,7 @@ function SchoolCrest({ brand, className, compact }: { brand: LogoBrand; classNam
   const top = brand.name.toUpperCase();
   const bottom = (brand.tagline || "").toUpperCase();
   return (
-    <svg viewBox="0 0 200 200" className={className} role="img" aria-label={`${brand.name} logo`}>
+    <svg viewBox="0 0 200 200" className={className} style={style} role="img" aria-label={`${brand.name} logo`}>
       <defs>
         <path id={`t${id}`} d="M 30 100 A 70 70 0 0 1 170 100" />
         <path id={`b${id}`} d="M 26 100 A 74 74 0 0 0 174 100" />

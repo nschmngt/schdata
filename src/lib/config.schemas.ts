@@ -112,11 +112,14 @@ export const brandingSchema = z.object({
   schoolId: z.string().uuid(),
   displayName: z.string().trim().max(160).default(""),
   tagline: z.string().trim().max(200).default(""),
+  motto: z.string().trim().max(200).default(""),
+  establishedYear: z.string().trim().regex(/^(\d{4})?$/, "Use a 4-digit year.").default(""),
+  /** An uploaded image, stored as a resized data URL (see image-resize.ts). */
   logoUrl: z
     .string()
     .trim()
-    .url("Use a full https:// image address.")
-    .max(500)
+    .max(600_000, "The logo image is too large.")
+    .regex(/^(data:image\/(png|jpeg|webp|svg\+xml|gif);base64,|https:\/\/)/, "Upload an image file.")
     .nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
