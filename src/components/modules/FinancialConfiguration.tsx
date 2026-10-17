@@ -11,6 +11,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, History, Loader2, Pencil, Plus, Save, ScrollText, Sparkles, Trash2, X } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
+import { useSchoolClasses } from "@/hooks/useSchoolClasses";
+import { Checkbox } from "@/components/ui/checkbox";
+import { parseLevelScope, serializeLevelScope } from "@/lib/education-levels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -643,6 +646,7 @@ function Field({
 }) {
   const cal = useAcademicCalendar();
   const id = `fld-${idPrefix}${field.key}`;
+  if (field.type === "levels") return <LevelsField id={id} field={field} value={value} onChange={onChange} disabled={disabled} />;
   if (field.type === "scope" || field.type === "period") {
     const opts =
       field.type === "scope"
@@ -1197,5 +1201,65 @@ function AuditSection({ entries }: { entries: FinanceConfigAudit[] }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/** Education levels an item applies to, each with an optional amount override. */
+function LevelsField({
+  id,
+  field,
+  value,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  field: FieldDef;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  const { levels } = useSchoolClasses();
+  const scope = parseLevelScope(value);
+  const set = (code: string, on: boolean, amount: number | null = scope.get(code) ?? null) => {
+    const next = new Map(scope);
+    if (on) next.set(code, amount);
+    else next.delete(code);
+    onChange(serializeLevelScope(next));
+  };
+  return (
+    <div className="space-y-1.5 sm:col-span-2">
+      <Label id={id}>{field.label}</Label>
+      {levels.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Add classes under System Configuration to choose levels.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2" role="group" aria-labelledby={id}>
+          {levels.map((l) => {
+            const on = scope.has(l.code);
+            return (
+              <div key={l.code} className="flex items-center gap-2">
+                <Checkbox
+                  id={`${id}-${l.code}`}
+                  checked={on}
+                  disabled={disabled}
+                  onCheckedChange={(c) => set(l.code, c === true)}
+                />
+                <Label htmlFor={`${id}-${l.code}`} className="min-w-24 font-normal">{l.name}</Label>
+                {on ? (
+                  <Input
+                    type="number"
+                    aria-label={`${l.name} amount`}
+                    placeholder="Base amount"
+                    value={scope.get(l.code) ?? ""}
+                    disabled={disabled}
+                    onChange={(e) => set(l.code, true, e.target.value === "" ? null : Number(e.target.value))}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {field.help ? <p className="text-xs text-muted-foreground">{field.help}</p> : null}
+    </div>
   );
 }

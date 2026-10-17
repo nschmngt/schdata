@@ -39,7 +39,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, email, role, access_level, status, force_password_change")
+      .select("id, full_name, email, role, access_level, status, force_password_change, avatar_url")
       .eq("id", userId)
       .maybeSingle();
     setProfile((data as PortalProfile | null) ?? null);

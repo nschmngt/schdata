@@ -1,10 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { queryOptions } from "@tanstack/react-query";
 import { createClient } from "@supabase/supabase-js";
-import { readBranding } from "./branding.server";
+import { readBranding, type Branding } from "./branding.server";
 
 export const DEFAULT_SCHOOL_NAME = "School Management Portal";
-export type PublicBranding = { name: string; tagline: string; logoUrl: string | null };
+export type PublicBranding = Branding;
 
 /** Public: only name, tagline and logo — nothing else from the school record. */
 export const getPublicBranding = createServerFn({ method: "GET" }).handler(async (): Promise<PublicBranding> => {

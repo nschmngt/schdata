@@ -1,3 +1,5 @@
+import { SchoolLogo } from "@/components/branding/SchoolLogo";
+import { LogoUpload } from "@/components/branding/ImageUpload";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1147,6 +1149,8 @@ function BrandingSection({
   const [form, setForm] = useState({
     displayName: "",
     tagline: "",
+    motto: "",
+    establishedYear: "",
     logoUrl: "",
     primaryColor: DEFAULT_BRAND_COLORS.primary,
     accentColor: DEFAULT_BRAND_COLORS.accent,
@@ -1162,6 +1166,8 @@ function BrandingSection({
     setForm({
       displayName: branding.display_name,
       tagline: branding.tagline,
+      motto: branding.motto ?? "",
+      establishedYear: branding.established_year ?? "",
       logoUrl: branding.logo_url ?? "",
       primaryColor: branding.primary_color,
       accentColor: branding.accent_color,
@@ -1195,12 +1201,14 @@ function BrandingSection({
         <Field label="Tagline" error={errors["tagline"]} className="sm:col-span-2">
           <Input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} />
         </Field>
-        <Field label="Logo address (https)" error={errors["logoUrl"]} className="sm:col-span-3">
-          <Input
-            placeholder="https://…/logo.png"
-            value={form.logoUrl}
-            onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-          />
+        <Field label="Motto" error={errors["motto"]} className="sm:col-span-2">
+          <Input value={form.motto} onChange={(e) => setForm({ ...form, motto: e.target.value })} />
+        </Field>
+        <Field label="Year established" error={errors["establishedYear"]}>
+          <Input inputMode="numeric" maxLength={4} placeholder="e.g. 2000" value={form.establishedYear} onChange={(e) => setForm({ ...form, establishedYear: e.target.value })} />
+        </Field>
+        <Field label="Logo" error={errors["logoUrl"]} className="sm:col-span-3">
+          <LogoUpload value={form.logoUrl} onChange={(v) => setForm({ ...form, logoUrl: v })} />
         </Field>
         <Field label="Primary colour" error={errors["primaryColor"]}>
           <div className="flex gap-2">
@@ -1277,9 +1285,17 @@ function BrandingSection({
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview</p>
         <div className="mt-3 flex items-center gap-3">
-          {form.logoUrl ? (
-            <img src={form.logoUrl} alt="School logo preview" className="size-12 rounded-lg object-contain" />
-          ) : null}
+          <SchoolLogo
+            size="lg"
+            brand={{
+              name: form.displayName || school.name,
+              tagline: form.tagline,
+              logoUrl: form.logoUrl || null,
+              primaryColor: form.primaryColor,
+              accentColor: form.accentColor,
+              establishedYear: form.establishedYear,
+            }}
+          />
           <div>
             <p className="text-lg font-bold">{form.displayName || school.name}</p>
             <p className="text-sm text-muted-foreground">{form.tagline || "Tagline goes here"}</p>

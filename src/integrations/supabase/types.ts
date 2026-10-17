@@ -769,6 +769,7 @@ export type Database = {
         Row: {
           access_level: Database["public"]["Enums"]["access_level"]
           admission_number: string | null
+          avatar_url: string | null
           class_name: string | null
           created_at: string
           department: string | null
@@ -794,6 +795,7 @@ export type Database = {
         Insert: {
           access_level?: Database["public"]["Enums"]["access_level"]
           admission_number?: string | null
+          avatar_url?: string | null
           class_name?: string | null
           created_at?: string
           department?: string | null
@@ -819,6 +821,7 @@ export type Database = {
         Update: {
           access_level?: Database["public"]["Enums"]["access_level"]
           admission_number?: string | null
+          avatar_url?: string | null
           class_name?: string | null
           created_at?: string
           department?: string | null
@@ -850,10 +853,12 @@ export type Database = {
           currency: string
           date_format: string
           display_name: string
+          established_year: string
           id: string
           language: string
           locale: string
           logo_url: string | null
+          motto: string
           primary_color: string
           school_id: string
           show_powered_by: boolean
@@ -866,10 +871,12 @@ export type Database = {
           currency?: string
           date_format?: string
           display_name?: string
+          established_year?: string
           id?: string
           language?: string
           locale?: string
           logo_url?: string | null
+          motto?: string
           primary_color?: string
           school_id: string
           show_powered_by?: boolean
@@ -882,10 +889,12 @@ export type Database = {
           currency?: string
           date_format?: string
           display_name?: string
+          established_year?: string
           id?: string
           language?: string
           locale?: string
           logo_url?: string | null
+          motto?: string
           primary_color?: string
           school_id?: string
           show_powered_by?: boolean
@@ -1552,6 +1561,19 @@ export type Database = {
         Returns: {
           logo_url: string
           name: string
+          tagline: string
+        }[]
+      }
+      get_public_branding_full: {
+        Args: never
+        Returns: {
+          accent_color: string
+          established_year: string
+          language: string
+          logo_url: string
+          motto: string
+          name: string
+          primary_color: string
           tagline: string
         }[]
       }

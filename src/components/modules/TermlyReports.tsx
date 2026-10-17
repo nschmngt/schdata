@@ -1,3 +1,4 @@
+import { LogoWatermark, SchoolLogo } from "@/components/branding/SchoolLogo";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -76,8 +77,10 @@ export function TermlyReports() {
       {report.error && <p className="text-sm text-destructive">{(report.error as Error).message}</p>}
 
       {r && (
-        <article className="surface space-y-6 p-6 print:border-0 print:shadow-none" id="report-card">
-          <header className="text-center">
+        <article className="surface relative space-y-6 overflow-hidden p-6 print:border-0 print:shadow-none" id="report-card">
+          <LogoWatermark />
+          <header className="relative text-center">
+            <SchoolLogo size="document" className="mx-auto mb-2" />
             <h2 className="text-xl font-bold uppercase">{school.name}</h2>
             {school.tagline && <p className="text-sm text-muted-foreground">{school.tagline}</p>}
             <p className="mt-1 font-semibold uppercase tracking-wide">Learner's Report Card</p>

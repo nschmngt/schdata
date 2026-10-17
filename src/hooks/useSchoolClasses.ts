@@ -6,6 +6,7 @@ export interface SchoolClassOption {
   id: string;
   schoolId: string;
   levelCode: string;
+  levelName: string;
   name: string;
 }
 
@@ -14,7 +15,13 @@ export interface SchoolClassOption {
  * Configuration → Classes. Single source of truth: every module that needs a
  * class list reads it from here instead of shipping its own hardcoded list.
  */
-export function useSchoolClasses(): { classes: SchoolClassOption[]; names: string[]; loading: boolean } {
+export function useSchoolClasses(): {
+  classes: SchoolClassOption[];
+  names: string[];
+  /** Education levels that have at least one class, in class order. */
+  levels: { code: string; name: string }[];
+  loading: boolean;
+} {
   const load = useServerFn(getSchoolClasses);
   const [classes, setClasses] = useState<SchoolClassOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,5 +42,6 @@ export function useSchoolClasses(): { classes: SchoolClassOption[]; names: strin
     };
   }, []);
 
-  return { classes, names: classes.map((c) => c.name), loading };
+  const levels = [...new Map(classes.map((c) => [c.levelCode, { code: c.levelCode, name: c.levelName }])).values()];
+  return { classes, names: classes.map((c) => c.name), levels, loading };
 }
