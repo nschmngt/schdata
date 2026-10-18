@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 
 /** A user's picture; the school logo is everyone's default until they upload their own. */
-export function UserAvatar({ url, name, size = "sm", className }: { url?: string | null; name: string; size?: LogoSize; className?: string }) {
+export function UserAvatar({ url, name, size = "sm", className }: { url?: string | null | undefined; name: string; size?: LogoSize; className?: string }) {
   if (url) {
     const px = { xs: "size-6", sm: "size-9", md: "size-12", lg: "size-20", xl: "size-32", document: "size-[22mm]" }[size];
     return <img src={url} alt={`${name}'s picture`} className={cn("shrink-0 rounded-full object-cover", px, className)} />;
