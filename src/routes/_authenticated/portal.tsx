@@ -6,7 +6,7 @@ import { useSchoolName } from "@/hooks/useSchoolName";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { School, LogOut, Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

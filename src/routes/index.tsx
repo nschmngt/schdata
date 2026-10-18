@@ -56,6 +56,7 @@ const ACCENT_TEXT: Record<Role, string> = {
 };
 
 function Landing() {
+  const brand = useSchoolName();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role | null>(null);
   const [view, setView] = useState<"login" | "forgot">("login");
