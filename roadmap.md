@@ -40,4 +40,4 @@
 - [x] "Next term begins" from the following calendar period
 - [x] Parent dashboard: real average score and attendance %, per-period summaries, paged lists
 - [x] Shared pagination on Assessment, Admissions, Attendance history, Finance tables
-- [ ] Branding logo: Super Admin uploads logo (no URL); one shared logo component sized per context (pages, dashboards, modules, documents, watermark); logo as default profile picture; branding fields (name, tagline, colours, language) centralized
+- [x] Branding logo: Super Admin uploads logo (no URL); one shared logo component sized per context (pages, dashboards, modules, documents, watermark); logo as default profile picture; branding fields (name, tagline, colours, language) centralized
