@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { assertPeriodOpen } from "@/lib/academic-calendar.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -769,4 +770,19 @@ export const getUserVerificationData = createServerFn({ method: "GET" })
       roles: (roles.data ?? []) as { user_id: string; role: string }[],
       rolesReadable: !roles.error,
     };
+  });
+
+/** Set or clear the signed-in user's own profile picture (resized data URL). */
+export const setMyAvatar = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      avatarUrl: z.string().max(600_000).regex(/^data:image\/(png|jpeg|webp|gif);base64,/, "Upload an image file.").nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("profiles").update({ avatar_url: data.avatarUrl }).eq("id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });

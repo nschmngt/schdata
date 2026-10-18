@@ -5,7 +5,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { School, LogIn, KeyRound, ArrowLeft, ShieldAlert } from "lucide-react";
+import { LogIn, KeyRound, ArrowLeft, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,7 @@ const ACCENT_TEXT: Record<Role, string> = {
 };
 
 function Landing() {
+  const brand = useSchoolName();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role | null>(null);
   const [view, setView] = useState<"login" | "forgot">("login");

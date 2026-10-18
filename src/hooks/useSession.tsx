@@ -11,6 +11,7 @@ export interface PortalProfile {
   access_level: AccessLevel;
   status: string;
   force_password_change: boolean;
+  avatar_url?: string | null;
 }
 
 interface SessionState {

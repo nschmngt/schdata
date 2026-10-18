@@ -90,6 +90,8 @@ export interface SchoolBranding {
   school_id: string;
   display_name: string;
   tagline: string;
+  motto?: string;
+  established_year?: string;
   logo_url: string | null;
   primary_color: string;
   accent_color: string;
