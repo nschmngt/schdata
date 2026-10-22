@@ -112,6 +112,12 @@ export function AssessmentManagement() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (cal.current?.name && !form.term) {
+      setForm((f) => ({ ...f, term: cal.current.name }));
+    }
+  }, [cal.current?.name]);
+
   // Teachers pick only from their assigned classes, and subjects they teach in that class.
   const classOptions = scope && !scope.isAdmin ? scope.classes : allClasses;
   const subjectOptions =
@@ -167,6 +173,12 @@ export function AssessmentManagement() {
       toast.error("Select a student first.");
       return;
     }
+    const scoreNum = Number(form.score);
+    const outOfNum = form.outOf ? Number(form.outOf) : defaultOutOf !== null ? defaultOutOf : undefined;
+    if (outOfNum !== undefined && scoreNum > outOfNum) {
+      toast.error(`Score (${scoreNum}) cannot exceed out of mark (${outOfNum}).`);
+      return;
+    }
     setBusy(true);
     try {
       await save({
@@ -177,8 +189,8 @@ export function AssessmentManagement() {
           term: form.term || cal.current?.name || "",
           subject: form.subject,
           assessmentType: form.assessmentType || types[0] || "",
-          score: Number(form.score),
-          outOf: Number(form.outOf || defaultOutOf || 0),
+          score: scoreNum,
+          ...(outOfNum !== undefined ? { outOf: outOfNum } : {}),
           remark: form.remark,
         },
       });
