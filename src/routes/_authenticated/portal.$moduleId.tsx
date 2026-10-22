@@ -15,6 +15,7 @@ import { FinancialConfiguration } from "@/components/modules/FinancialConfigurat
 import { UserVerification } from "@/components/modules/UserVerification";
 import { AttendanceManagement } from "@/components/modules/AttendanceManagement";
 import { AssessmentManagement } from "@/components/modules/AssessmentManagement";
+import { AssignmentManagement } from "@/components/modules/AssignmentManagement";
 import { TermlyReports } from "@/components/modules/TermlyReports";
 import { ArchivesManagement } from "@/components/modules/ArchivesManagement";
 import { AcademicConfiguration } from "@/components/modules/AcademicConfiguration";
@@ -127,6 +128,8 @@ function ModulePage() {
         <TermlyReports />
       ) : mod.id === "assessment" ? (
         <AssessmentManagement />
+      ) : mod.id === "assignments" ? (
+        <AssignmentManagement />
       ) : mod.id === "archives" ? (
         <ArchivesManagement />
       ) : isConfigDomain(mod.id) ? (
