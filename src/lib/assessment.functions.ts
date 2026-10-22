@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertPeriodOpen, loadRules } from "@/lib/academic-calendar.server";
-import { activeAssessmentTypes } from "@/lib/academic-rules";
+import { activeAssessmentTypes, num } from "@/lib/academic-rules";
 import { assertTeaches, loadTeachingScope } from "@/lib/teaching.server";
 import { assessmentIdSchema, assessmentInputSchema } from "@/lib/assessment.schemas";
 
@@ -68,10 +68,16 @@ export const saveAssessment = createServerFn({ method: "POST" })
     await assertPeriodOpen(context.supabase, { period: data.term });
     const scope = await loadTeachingScope(context.supabase, context.userId);
     assertTeaches(scope, data.className, data.subject);
-    const types = activeAssessmentTypes(await loadRules(context.supabase));
+    const rules = await loadRules(context.supabase);
+    const types = activeAssessmentTypes(rules);
     if (!types.some((t) => t.toLowerCase() === data.assessmentType.toLowerCase())) {
       throw new Error(`"${data.assessmentType}" is not an active assessment type in Academic Configuration.`);
     }
+    const resolvedOutOf = data.outOf ?? num(rules, "assessment", "default-out-of") ?? 100;
+    if (data.score > resolvedOutOf) {
+      throw new Error(`Score (${data.score}) cannot exceed out of mark (${resolvedOutOf}).`);
+    }
+
     if (data.id) {
       const { data: existing } = await context.supabase
         .from("student_assessments").select("class_name, subject").eq("id", data.id).maybeSingle();
@@ -84,7 +90,7 @@ export const saveAssessment = createServerFn({ method: "POST" })
       subject: data.subject,
       assessment_type: data.assessmentType,
       score: data.score,
-      out_of: data.outOf,
+      out_of: resolvedOutOf,
       remark: data.remark,
     };
 
@@ -113,8 +119,9 @@ export const deleteAssessment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const scope = await loadTeachingScope(context.supabase, context.userId);
     const { data: existing } = await context.supabase
-      .from("student_assessments").select("class_name, subject").eq("id", data.id).maybeSingle();
+      .from("student_assessments").select("class_name, subject, term").eq("id", data.id).maybeSingle();
     if (!existing) throw new Error("Record not found.");
+    await assertPeriodOpen(context.supabase, { period: existing.term });
     assertTeaches(scope, existing.class_name, existing.subject);
     const { error } = await context.supabase
       .from("student_assessments")
