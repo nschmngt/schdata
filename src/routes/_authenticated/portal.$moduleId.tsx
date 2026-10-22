@@ -18,6 +18,7 @@ import { AssessmentManagement } from "@/components/modules/AssessmentManagement"
 import { TermlyReports } from "@/components/modules/TermlyReports";
 import { ArchivesManagement } from "@/components/modules/ArchivesManagement";
 import { AcademicConfiguration } from "@/components/modules/AcademicConfiguration";
+import { ExamsQuizzes } from "@/components/modules/ExamsQuizzes";
 import { PeopleConfiguration } from "@/components/modules/PeopleConfiguration";
 import { OperationsConfiguration } from "@/components/modules/OperationsConfiguration";
 import { ConfigDomainPlaceholder } from "@/components/modules/ConfigDomainPlaceholder";
@@ -97,7 +98,9 @@ function ModulePage() {
         </div>
       </header>
 
-      {mod.id === "user-management" ? (
+      {mod.id === "exams-quizzes" ? (
+        <ExamsQuizzes />
+      ) : mod.id === "user-management" ? (
         <UserManagement />
       ) : mod.id === "staff-management" ? (
         <StaffManagement />
