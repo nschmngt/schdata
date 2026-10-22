@@ -155,6 +155,13 @@
       "when": 1792207617594,
       "tag": "0021_branding_logo_upload",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0022_add_assignments_and_submissions",
+      "breakpoints": true
     }
   ]
 }

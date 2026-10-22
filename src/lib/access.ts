@@ -141,6 +141,14 @@ export const MODULES: ModuleDef[] = [
     roles: STAFF_UP,
   },
   {
+    id: "assignments",
+    name: "Assignments",
+    description: "Individual and group assignments, submission tracking and late penalties.",
+    icon: FileText,
+    category: "Academics",
+    roles: ALL,
+  },
+  {
     id: "students",
     name: "Students",
     description: "Student records, classes and guardians.",
