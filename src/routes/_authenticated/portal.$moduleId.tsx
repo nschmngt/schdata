@@ -30,6 +30,7 @@ import { LessonsManagement } from "@/components/modules/LessonsManagement";
 import { StudentsManagement } from "@/components/modules/StudentsManagement";
 import { PublicityManagement } from "@/components/modules/PublicityManagement";
 import { FeesInvoicingManagement } from "@/components/modules/FeesInvoicingManagement";
+import { LibraryManagement } from "@/components/modules/LibraryManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -108,6 +109,8 @@ function ModulePage() {
         <FeesInvoicingManagement />
       ) : mod.id === "timetable" ? (
         <TimetableManagement />
+      ) : mod.id === "library" ? (
+        <LibraryManagement />
       ) : mod.id === "lessons" ? (
         <LessonsManagement />
       ) : mod.id === "students" ? (
