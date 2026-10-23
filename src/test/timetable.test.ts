@@ -80,6 +80,32 @@ describe("Timetable Schemas", () => {
     const parsed = inlineQuizInputSchema.safeParse(validQuiz);
     expect(parsed.success).toBe(true);
   });
+
+  it("validates exam and upcoming_event slot types", () => {
+    const examSlot = {
+      term: "Term 1",
+      className: "JHS 1",
+      subject: "Science",
+      dayOfWeek: "wednesday",
+      startTime: "10:00",
+      endTime: "11:30",
+      eventType: "exam",
+      quizId: "33333333-3333-3333-3333-333333333333",
+    };
+    expect(timetableSlotInputSchema.safeParse(examSlot).success).toBe(true);
+
+    const eventSlot = {
+      term: "Term 1",
+      className: "JHS 1",
+      subject: "General",
+      dayOfWeek: "friday",
+      startTime: "14:00",
+      endTime: "15:00",
+      eventType: "upcoming_event",
+      title: "Science Exhibition",
+    };
+    expect(timetableSlotInputSchema.safeParse(eventSlot).success).toBe(true);
+  });
 });
 
 describe("Timetable Helpers & Academic Grid", () => {

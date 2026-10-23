@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertPeriodOpen, loadCalendar, loadRules } from "@/lib/academic-calendar.server";
 import { assertTeaches, loadTeachingScope } from "@/lib/teaching.server";
 import { logAudit } from "@/lib/admin.server";
+import { resolveProvisionedSchool } from "@/lib/school.server";
 import {
   slotIdSchema,
   timetableSlotInputSchema,
@@ -99,7 +100,7 @@ export const getTimetableAutoPopulationData = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const scope = await loadTeachingScope(context.supabase, context.userId);
 
-    const [classes, subjectCatalog, rules, calendar, staffRes, quizRes] = await Promise.all([
+    const [classes, subjectCatalog, rules, calendar, staffRes, assessmentRes] = await Promise.all([
       getSchoolClasses({ context }),
       getSubjectCatalog({ context }),
       loadRules(context.supabase),
@@ -111,19 +112,22 @@ export const getTimetableAutoPopulationData = createServerFn({ method: "GET" })
         .order("full_name"),
       context.supabase
         .from("exams_quizzes")
-        .select("id, title, class_name, subject, total_marks, pass_mark, status")
-        .eq("exam_type", "quiz")
+        .select("id, title, class_name, subject, total_marks, pass_mark, status, exam_type")
         .order("created_at", { ascending: false }),
     ]);
 
     if (staffRes.error) throw new Error(staffRes.error.message);
-    if (quizRes.error) throw new Error(quizRes.error.message);
+    if (assessmentRes.error) throw new Error(assessmentRes.error.message);
+
+    const assessments = assessmentRes.data ?? [];
 
     return {
       classes,
       subjectCatalog,
       teachers: staffRes.data ?? [],
-      quizzes: quizRes.data ?? [],
+      quizzes: assessments.filter((a: any) => a.exam_type === "quiz"),
+      exams: assessments.filter((a: any) => a.exam_type === "exam"),
+      assessments,
       rules,
       calendar,
       userScope: scope,
@@ -139,6 +143,7 @@ export const saveTimetableSlot = createServerFn({ method: "POST" })
       await assertPeriodOpen(context.supabase, { period: data.term });
     }
 
+    const school = await resolveProvisionedSchool(context.supabase);
     const scope = await loadTeachingScope(context.supabase, context.userId);
     if (data.subject && data.className) {
       assertTeaches(scope, data.className, data.subject);
@@ -177,6 +182,7 @@ export const saveTimetableSlot = createServerFn({ method: "POST" })
     // Handle inline quiz creation if provided
     if (data.inlineQuiz) {
       const quizRow = {
+        school_id: school?.id,
         title: data.inlineQuiz.title,
         description: data.inlineQuiz.description,
         exam_type: "quiz",
@@ -217,6 +223,7 @@ export const saveTimetableSlot = createServerFn({ method: "POST" })
     }
 
     const slotRow = {
+      school_id: school?.id,
       term: data.term,
       class_name: data.className,
       subject: data.subject,
