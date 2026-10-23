@@ -25,6 +25,7 @@ import { OperationsConfiguration } from "@/components/modules/OperationsConfigur
 import { ConfigDomainPlaceholder } from "@/components/modules/ConfigDomainPlaceholder";
 import { isConfigDomain } from "@/lib/config-domains";
 import { useSchoolName } from "@/hooks/useSchoolName";
+import { ResultsManagement } from "@/components/modules/ResultsManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -127,6 +128,8 @@ function ModulePage() {
         <UserVerification />
       ) : mod.id === "attendance" ? (
         <AttendanceManagement />
+      ) : mod.id === "results" ? (
+        <ResultsManagement />
       ) : mod.id === "termly-reports" ? (
         <TermlyReports />
       ) : mod.id === "assessment" ? (
