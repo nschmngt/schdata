@@ -28,6 +28,7 @@ import { useSchoolName } from "@/hooks/useSchoolName";
 import { ResultsManagement } from "@/components/modules/ResultsManagement";
 import { LessonsManagement } from "@/components/modules/LessonsManagement";
 import { StudentsManagement } from "@/components/modules/StudentsManagement";
+import { PublicityManagement } from "@/components/modules/PublicityManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -110,6 +111,8 @@ function ModulePage() {
         <StudentsManagement />
       ) : mod.id === "exams-quizzes" ? (
         <ExamsQuizzes />
+      ) : mod.id === "publicity" ? (
+        <PublicityManagement />
       ) : mod.id === "user-management" ? (
         <UserManagement />
       ) : mod.id === "staff-management" ? (

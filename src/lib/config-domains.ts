@@ -79,14 +79,15 @@ export const CONFIG_DOMAINS: ConfigDomain[] = [
   {
     id: "operations-configuration",
     name: "Operations Configuration",
-    responsibility: "Admissions processes, library policies and messaging channels.",
-    governs: ["admissions", "library", "messaging", "dashboard"],
+    responsibility: "Admissions processes, library policies, messaging channels and publicity rules.",
+    governs: ["admissions", "library", "messaging", "dashboard", "publicity"],
     status: "live",
     stage: 4,
     sections: [
       { title: "Admissions process", summary: "Application steps, required documents, numbering." },
       { title: "Library policies", summary: "Loan periods, limits and fines." },
       { title: "Messaging channels", summary: "Announcement audiences and channels." },
+      { title: "Publicity & Landing Page", summary: "Notice board, circulars, banner slideshows, articles and media gallery." },
     ],
   },
   {
