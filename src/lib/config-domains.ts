@@ -49,7 +49,7 @@ export const CONFIG_DOMAINS: ConfigDomain[] = [
     name: "Academic Configuration",
     responsibility:
       "Academic calendars, grading, assessments, examinations, reporting and timetabling rules.",
-    governs: ["attendance", "exams-quizzes", "assessment", "assignments", "results", "termly-reports", "timetable", "performance-tracker"],
+    governs: ["attendance", "lessons", "exams-quizzes", "assessment", "assignments", "results", "termly-reports", "timetable", "performance-tracker"],
     status: "live",
     stage: 2,
     sections: [

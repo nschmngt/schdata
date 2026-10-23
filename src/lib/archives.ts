@@ -53,6 +53,22 @@ export const ARCHIVE_SOURCES: ArchiveSource[] = [
     defaultRetentionYears: 7,
   },
   {
+    key: "lessons",
+    label: "Lessons & syllabus content",
+    module: "Lessons",
+    table: "lessons",
+    dateColumn: "created_at",
+    select: "id, created_at, title, class_name, subject, term, status",
+    columns: [
+      { key: "title", label: "Title", path: "title" },
+      { key: "class", label: "Class", path: "class_name" },
+      { key: "subject", label: "Subject", path: "subject" },
+      { key: "term", label: "Term", path: "term" },
+      { key: "status", label: "Status", path: "status" },
+    ],
+    defaultRetentionYears: 7,
+  },
+  {
     key: "assessments",
     label: "Assessment scores",
     module: "Assessment",
