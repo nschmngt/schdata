@@ -169,6 +169,27 @@
       "when": 1792400000000,
       "tag": "0023_add_result_publications",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792500000000,
+      "tag": "0024_add_lessons_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792600000000,
+      "tag": "0025_add_timetable_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0026_add_library_module",
+      "breakpoints": true
     }
   ]
 }
