@@ -30,6 +30,7 @@ import { LessonsManagement } from "@/components/modules/LessonsManagement";
 import { StudentsManagement } from "@/components/modules/StudentsManagement";
 import { PublicityManagement } from "@/components/modules/PublicityManagement";
 import { FeesInvoicingManagement } from "@/components/modules/FeesInvoicingManagement";
+import { InvoicesManagement } from "@/components/modules/InvoicesManagement";
 import { LibraryManagement } from "@/components/modules/LibraryManagement";
 
 
@@ -107,6 +108,8 @@ function ModulePage() {
 
       {mod.id === "fees-invoicing" ? (
         <FeesInvoicingManagement />
+      ) : mod.id === "invoices" ? (
+        <InvoicesManagement />
       ) : mod.id === "timetable" ? (
         <TimetableManagement />
       ) : mod.id === "library" ? (
