@@ -114,9 +114,10 @@ export function FinancialManagement() {
       (data?.payroll ?? [])
         .filter((r) => r.status === "processed")
         .reduce((s, r) => s + num(r.net_salary), 0);
-    const pending = (data?.fees ?? [])
-      .filter((r) => r.status !== "paid")
-      .reduce((s, r) => s + Math.max(num(r.amount_due) - num(r.amount_paid), 0), 0);
+    const pending = (data?.fees ?? []).reduce(
+      (s, r) => s + Math.max(num(r.amount_due) - num(r.amount_paid), 0),
+      0,
+    );
     const pendingCount = (data?.fees ?? []).filter((r) => r.status !== "paid").length;
     return { revenue, expenses, net: revenue - expenses, pending, pendingCount };
   }, [data]);
@@ -309,7 +310,29 @@ export function FinancialManagement() {
                         <td className="px-3 py-2">{student?.class_admitted ?? "—"}</td>
                         <td className="px-3 py-2">{f.term}</td>
                         <td className="px-3 py-2">{money(f.amount_due)}</td>
-                        <td className="px-3 py-2">{money(f.amount_paid)}</td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="h-8 w-28"
+                            defaultValue={num(f.amount_paid)}
+                            onBlur={(e) => {
+                              const val = num(e.target.value);
+                              if (val !== num(f.amount_paid)) {
+                                void run(
+                                  () =>
+                                    patchFee({
+                                      data: {
+                                        id: f.id,
+                                        amountPaid: val,
+                                      },
+                                    }),
+                                  "Payment updated.",
+                                );
+                              }
+                            }}
+                          />
+                        </td>
                         <td className="px-3 py-2">{f.due_date ?? "—"}</td>
                         <td className="px-3 py-2">
                           <Select
@@ -320,7 +343,7 @@ export function FinancialManagement() {
                                   patchFee({
                                     data: {
                                       id: f.id,
-                                      status: status as "pending" | "paid" | "overdue",
+                                      status: status as "pending" | "partially_paid" | "paid" | "overdue",
                                       ...(status === "paid"
                                         ? { amountPaid: num(f.amount_due) }
                                         : {}),
@@ -330,13 +353,13 @@ export function FinancialManagement() {
                               )
                             }
                           >
-                            <SelectTrigger className="h-8 w-32">
+                            <SelectTrigger className="h-8 w-36">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               {FEE_STATUSES.map((s) => (
                                 <SelectItem key={s} value={s}>
-                                  {s}
+                                  {s.replace("_", " ")}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -778,8 +801,9 @@ function FeeDialog({
     term: string;
     feeCode: string | null;
     amountDue: number;
+    amountPaid?: number;
     dueDate: string;
-    status: "pending" | "paid" | "overdue";
+    status?: "pending" | "partially_paid" | "paid" | "overdue";
   }) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
@@ -810,7 +834,8 @@ function FeeDialog({
   const [dueDate, setDueDate] = useState("");
   // Due date follows the selected term/semester end unless the user changes it.
   const effectiveDue = dueDate || periodEnd(cal.calendar, period || undefined);
-  const [status, setStatus] = useState<"pending" | "paid" | "overdue">("pending");
+  const [amountPaidInput, setAmountPaidInput] = useState("0");
+  const [status, setStatus] = useState<"pending" | "partially_paid" | "paid" | "overdue">("pending");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -872,22 +897,33 @@ function FeeDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Amount">
-            <Input
-              type="number"
-              step="0.01"
-              value={amountDue}
-              onChange={(e) => setAmountDue(e.target.value)}
-              placeholder="0.00"
-            />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Amount due">
+              <Input
+                type="number"
+                step="0.01"
+                value={amountDue}
+                onChange={(e) => setAmountDue(e.target.value)}
+                placeholder="0.00"
+              />
+            </Field>
+            <Field label="Amount paid">
+              <Input
+                type="number"
+                step="0.01"
+                value={amountPaidInput}
+                onChange={(e) => setAmountPaidInput(e.target.value)}
+                placeholder="0.00"
+              />
+            </Field>
+          </div>
           <Field label="Due date">
             <PeriodDateInput value={effectiveDue} onChange={setDueDate} />
           </Field>
-          <Field label="Status">
+          <Field label="Status (Optional override)">
             <Select
               value={status}
-              onValueChange={(v) => setStatus(v as "pending" | "paid" | "overdue")}
+              onValueChange={(v) => setStatus(v as "pending" | "partially_paid" | "paid" | "overdue")}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -895,7 +931,7 @@ function FeeDialog({
               <SelectContent>
                 {FEE_STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s}
+                    {s.replace("_", " ")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -911,12 +947,14 @@ function FeeDialog({
                 term: periodLabel(period || cal.current?.name || "", term),
                 feeCode: feeItems.find((i) => i.name === term)?.code ?? null,
                 amountDue: Number(amountDue || 0),
+                amountPaid: Number(amountPaidInput || 0),
                 dueDate: effectiveDue,
                 status,
               });
               if (ok) {
                 setOpen(false);
                 setAmountDue("");
+                setAmountPaidInput("0");
               }
             }}
           >

@@ -32,7 +32,35 @@ export const FEE_TYPES = [
   { value: "other", label: "Other Fee" },
 ] as const;
 
-export const FEE_STATUSES = ["pending", "paid", "overdue"] as const;
+export const FEE_STATUSES = ["pending", "partially_paid", "paid", "overdue"] as const;
+export type FeeStatus = (typeof FEE_STATUSES)[number];
+
+/**
+ * Calculates payment status automatically based on amount paid vs amount due and due date.
+ */
+export function calculatePaymentStatus(
+  amountPaid: number,
+  amountDue: number,
+  dueDate?: string | null,
+  currentDate: string = today(),
+): FeeStatus {
+  const paid = Math.max(0, Number(amountPaid) || 0);
+  const due = Math.max(0, Number(amountDue) || 0);
+
+  if (due === 0 || paid >= due) {
+    return "paid";
+  }
+
+  if (paid > 0) {
+    return "partially_paid";
+  }
+
+  if (dueDate && dueDate.trim().length >= 8 && currentDate > dueDate) {
+    return "overdue";
+  }
+
+  return "pending";
+}
 export const INCOME_STATUSES = ["received", "pending"] as const;
 export const EXPENSE_STATUSES = ["paid", "pending"] as const;
 export const PAYROLL_STATUSES = ["pending", "processed"] as const;

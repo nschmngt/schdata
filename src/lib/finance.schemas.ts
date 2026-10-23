@@ -39,13 +39,14 @@ export const feeSchema = z.object({
   amountDue: amount,
   amountPaid: amount.default(0),
   dueDate: date.nullable().optional(),
-  status: z.enum(["pending", "paid", "overdue"]).default("pending"),
+  status: z.enum(["pending", "partially_paid", "paid", "overdue"]).optional(),
 });
 
 export const feeUpdateSchema = z.object({
   id: z.string().uuid(),
   amountPaid: amount.optional(),
-  status: z.enum(["pending", "paid", "overdue"]).optional(),
+  amountDue: amount.optional(),
+  status: z.enum(["pending", "partially_paid", "paid", "overdue"]).optional(),
 });
 
 export const idSchema = z.object({ id: z.string().uuid() });
