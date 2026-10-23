@@ -262,15 +262,27 @@ export const createAccount = createServerFn({ method: "POST" })
 
 export const updateAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => updateAccountSchema.parse(d))
+  .inputValidator((d: unknown) => updateAccountSchema.extend({ schoolId: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data.schoolId);
+    const superAdmin = await isSuperAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     if (data.role === "super_admin" || data.role === "school_manager") {
       await assertSuperAdmin(context.supabase, context.userId);
     }
 
+    // Verify target profile belongs to tenant unless Super Admin
+    if (!superAdmin) {
+      const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
+      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+        throw new Error("Forbidden: Cannot update an account belonging to another school.");
+      }
+    }
+
     if (data.startDate) await assertPeriodOpen(context.supabase, { date: data.startDate, allowUpcoming: true });
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -302,6 +314,7 @@ export const updateAccount = createServerFn({ method: "POST" })
       data.position,
       data.teachingClasses,
       data.teachingSubjects,
+      tenant.schoolId,
     );
 
     await logAudit(context.supabase, context.userId, {
@@ -309,6 +322,7 @@ export const updateAccount = createServerFn({ method: "POST" })
       description: `Updated account ${data.email}`,
       targetUserId: data.userId,
       targetEmail: data.email,
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
@@ -318,7 +332,17 @@ export const setAccountStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => statusSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const superAdmin = await isSuperAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (!superAdmin) {
+      const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
+      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+        throw new Error("Forbidden: Cannot modify status for an account belonging to another school.");
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from("profiles")
       .update({ status: data.status })
@@ -329,6 +353,7 @@ export const setAccountStatus = createServerFn({ method: "POST" })
       action: "status_changed",
       description: `Account status set to ${data.status}`,
       targetUserId: data.userId,
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
@@ -343,7 +368,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: target } = await supabaseAdmin
       .from("profiles")
-      .select("email")
+      .select("email, school_id")
       .eq("id", data.userId)
       .maybeSingle();
 
@@ -354,6 +379,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
       action: "user_deleted",
       description: `Deleted account ${target?.email ?? data.userId}`,
       targetEmail: target?.email ?? null,
+      schoolId: target?.school_id,
     });
     return { ok: true };
   });
@@ -413,7 +439,17 @@ export const adminResetPassword = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => adminResetSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const superAdmin = await isSuperAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (!superAdmin) {
+      const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
+      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+        throw new Error("Forbidden: Cannot reset password for an account belonging to another school.");
+      }
+    }
+
     const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
       password: data.password,
     });
@@ -446,23 +482,42 @@ export const adminResetPassword = createServerFn({ method: "POST" })
       description: `Password reset for ${target.data?.email ?? data.userId}`,
       targetUserId: data.userId,
       targetEmail: target.data?.email ?? null,
-      schoolId: target.data?.school_id,
+      schoolId: target.data?.school_id ?? tenant.schoolId,
     });
     return { ok: true };
   });
 
 export const listResetRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data?.schoolId);
+    const superAdmin = await isSuperAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
+
+    let query = supabaseAdmin
       .from("password_reset_requests")
       .select("id, email, note, status, created_at, handled_at, handled_by")
       .order("created_at", { ascending: false })
       .limit(100);
+
+    if (!superAdmin && tenant.schoolId) {
+      const { data: schoolProfiles } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("school_id", tenant.schoolId);
+      const validEmails = (schoolProfiles ?? []).map((p) => p.email.toLowerCase());
+      if (validEmails.length > 0) {
+        query = query.in("email", validEmails);
+      } else {
+        return [];
+      }
+    }
+
+    const { data: requests, error } = await query;
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return requests ?? [];
   });
 
 export const resolveResetRequest = createServerFn({ method: "POST" })
@@ -470,6 +525,8 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => resolveResetRequestSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const superAdmin = await isSuperAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const { data: request, error: readError } = await supabaseAdmin
@@ -494,6 +551,7 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
         action: "reset_rejected",
         description: `Rejected password reset request for ${request.email}`,
         targetEmail: request.email,
+        schoolId: tenant.schoolId,
       });
       return { ok: true, status: "rejected" as const };
     }
@@ -504,6 +562,10 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
       .ilike("email", request.email)
       .maybeSingle();
     if (!profile) throw new Error("No account exists for that email address.");
+
+    if (!superAdmin && profile.school_id && profile.school_id !== tenant.schoolId) {
+      throw new Error("Forbidden: Cannot resolve password reset request for an account belonging to another school.");
+    }
 
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
       password: data.password!,

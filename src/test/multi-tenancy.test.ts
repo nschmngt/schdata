@@ -66,7 +66,7 @@ describe("Multi-Tenancy Tenant Context Resolution & Security", () => {
     expect(ctx.isSuperAdmin).toBe(false);
   });
 
-  it("prevents standard user from accessing another school even if requested", async () => {
+  it("prevents standard user or school manager from accessing another school even if requested", async () => {
     const mockSupabase = {
       from: (table: string) => {
         if (table === "profiles") {
@@ -110,9 +110,9 @@ describe("Multi-Tenancy Tenant Context Resolution & Security", () => {
       },
     };
 
-    // Standard user attempts to request school-2222
+    // School manager attempts to request school-2222
     const ctx = await resolveTenantContext(mockSupabase, "user-manager-1", "school-2222");
-    // Should be locked to assigned school-1111
+    // Must be locked strictly to assigned school-1111
     expect(ctx.schoolId).toBe("school-1111");
     expect(ctx.isSuperAdmin).toBe(false);
   });
@@ -162,24 +162,31 @@ describe("Multi-Tenancy Tenant Context Resolution & Security", () => {
     expect(ctx.isSuperAdmin).toBe(true);
   });
 
-  it("denies context resolution if no valid school is found in system (deny by default)", async () => {
+  it("denies context resolution if user has no assigned school and is not Super Admin (deny by default)", async () => {
     const mockSupabase = {
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: null }),
-            limit: () => ({ maybeSingle: async () => ({ data: null }) }),
-          }),
-          order: () => ({
-            order: () => ({
-              limit: () => ({ maybeSingle: async () => ({ data: null }) }),
+      from: (table: string) => {
+        if (table === "profiles") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: { role: "staff", school_id: null },
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null }),
             }),
           }),
-        }),
-      }),
+        };
+      },
     };
 
-    await expect(resolveTenantContext(mockSupabase, "user-unknown")).rejects.toThrow(
+    await expect(resolveTenantContext(mockSupabase, "unassigned-user")).rejects.toThrow(
       "Tenant Context Error",
     );
   });
