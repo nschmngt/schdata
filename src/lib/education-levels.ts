@@ -6,6 +6,23 @@
  */
 import type { LevelRef } from "./teaching-levels";
 
+export const ALL_LEVELS = [
+  { code: "KG", name: "Kindergarten" },
+  { code: "PRIMARY", name: "Primary School" },
+  { code: "JHS", name: "Junior High School" },
+  { code: "SHS", name: "Senior High School" },
+] as const;
+
+export function inferEducationLevel(className: string | null | undefined): string {
+  if (!className) return "PRIMARY";
+  const norm = className.trim().toLowerCase();
+  if (norm.includes("primary") || norm.includes("basic")) return "PRIMARY";
+  if (norm.includes("jhs") || norm.includes("junior")) return "JHS";
+  if (norm.includes("shs") || norm.includes("senior")) return "SHS";
+  if (norm.includes("kg") || norm.includes("nursery") || norm.includes("kindergarten")) return "KG";
+  return "PRIMARY";
+}
+
 export const EDUCATION_LEVELS = [
   { code: "KG", name: "Kindergarten" },
   { code: "PRIMARY", name: "Primary School" },
