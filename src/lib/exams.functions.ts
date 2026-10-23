@@ -268,6 +268,19 @@ export const submitExamAnswers = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => submitExamSchema.parse(d))
   .handler(async ({ data, context }) => {
     const tenant = await resolveTenantContext(context.supabase, context.userId);
+
+    // Verify submission belongs to caller's tenant context BEFORE modifying exam_answers
+    const { data: submission } = await context.supabase
+      .from("exam_submissions")
+      .select("id, student_id, school_id")
+      .eq("id", data.submissionId)
+      .eq("school_id", tenant.schoolId)
+      .maybeSingle();
+
+    if (!submission) {
+      throw new Error("Submission not found or access denied.");
+    }
+
     const { data: questions } = await context.supabase
       .from("exam_questions")
       .select("*")

@@ -23,12 +23,12 @@ export const getAppointmentLetter = createServerFn({ method: "GET" })
     if (failure) throw new Error(failure.message);
     let employee;
     if (data.kind === "account") {
-      const result = await db.from("profiles").select("id, full_name, email, role, position, salary, start_date, created_at, employee_id").eq("id", data.id).single();
+      const result = await db.from("profiles").select("id, full_name, email, role, position, salary, start_date, created_at, employee_id, school_id").eq("id", data.id).eq("school_id", tenantContext.schoolId).single();
       if (result.error) throw new Error(result.error.message);
       if (!eligibleForOffer(result.data.role)) throw new Error("Offer letters are available for staff and school managers only.");
       employee = { id: result.data.id, name: result.data.full_name, email: result.data.email, role: result.data.role === "school_manager" ? "School Manager" : "Staff", position: result.data.position, salary: result.data.salary, startDate: result.data.start_date, onboardedAt: result.data.created_at, employeeId: result.data.employee_id };
     } else {
-      const result = await db.from("offer_letters").select("id, candidate_name, candidate_email, position, salary, start_date, created_at").eq("id", data.id).single();
+      const result = await db.from("offer_letters").select("id, candidate_name, candidate_email, position, salary, start_date, created_at, school_id").eq("id", data.id).eq("school_id", tenantContext.schoolId).single();
       if (result.error) throw new Error(result.error.message);
       employee = { id: result.data.id, name: result.data.candidate_name, email: result.data.candidate_email, role: "", position: result.data.position, salary: result.data.salary, startDate: result.data.start_date, onboardedAt: result.data.created_at, employeeId: null };
     }

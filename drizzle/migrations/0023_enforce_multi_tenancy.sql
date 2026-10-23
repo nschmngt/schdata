@@ -85,6 +85,8 @@ ALTER TABLE public.class_teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_exeat ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exams_quizzes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- 6. Enterprise Row Level Security (RLS) policies
@@ -104,6 +106,48 @@ CREATE POLICY "tenant_isolation_admissions" ON public.admissions FOR ALL TO auth
       SELECT 1 FROM public.profiles p
       WHERE p.id = auth.uid()
         AND (p.role = 'super_admin' OR p.school_id = admissions.school_id)
+    )
+  );
+
+-- Class teachers & Teaching assignments policies
+DROP POLICY IF EXISTS "tenant_isolation_class_teachers" ON public.class_teachers;
+CREATE POLICY "tenant_isolation_class_teachers" ON public.class_teachers FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.role = 'super_admin' OR p.school_id = class_teachers.school_id)
+    )
+  );
+
+DROP POLICY IF EXISTS "tenant_isolation_teaching_assignments" ON public.teaching_assignments;
+CREATE POLICY "tenant_isolation_teaching_assignments" ON public.teaching_assignments FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.role = 'super_admin' OR p.school_id = teaching_assignments.school_id)
+    )
+  );
+
+-- Exams & Submissions policies
+DROP POLICY IF EXISTS "tenant_isolation_exams_quizzes" ON public.exams_quizzes;
+CREATE POLICY "tenant_isolation_exams_quizzes" ON public.exams_quizzes FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.role = 'super_admin' OR p.school_id = exams_quizzes.school_id)
+    )
+  );
+
+DROP POLICY IF EXISTS "tenant_isolation_exam_submissions" ON public.exam_submissions;
+CREATE POLICY "tenant_isolation_exam_submissions" ON public.exam_submissions FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      WHERE p.id = auth.uid()
+        AND (p.role = 'super_admin' OR p.school_id = exam_submissions.school_id)
     )
   );
 
