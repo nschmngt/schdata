@@ -58,6 +58,7 @@ import {
   generateDailyGrid,
   type PeriodSlot,
 } from "@/lib/timetable";
+import { subjectsForClass } from "@/lib/education-levels";
 import {
   listTimetableSlots,
   getTimetableAutoPopulationData,
@@ -165,15 +166,18 @@ export function TimetableManagement() {
   }, []);
 
   const availableSubjectsForForm = useMemo(() => {
-    if (!autoData?.subjectCatalog) return [];
+    if (!autoData?.subjectCatalog || !autoData?.classes) return [];
     if (!formClassName) {
       return autoData.subjectCatalog.map((s: any) => s.name);
     }
-    const cls = autoData.classes.find((c: any) => c.name === formClassName);
-    if (!cls) return autoData.subjectCatalog.map((s: any) => s.name);
-    return autoData.subjectCatalog
-      .filter((s: any) => s.levelCode === cls.levelCode)
-      .map((s: any) => s.name);
+    const scoped = subjectsForClass(
+      autoData.subjectCatalog,
+      autoData.classes,
+      formClassName,
+    );
+    return scoped.length > 0
+      ? scoped
+      : autoData.subjectCatalog.map((s: any) => s.name);
   }, [autoData, formClassName]);
 
   const dailyGrid = useMemo(() => {
@@ -249,6 +253,10 @@ export function TimetableManagement() {
         toast.error("Please select or enter a subject.");
         return;
       }
+      if (formEventType === "upcoming_event" && !formTitle.trim()) {
+        toast.error("Please enter a title for the upcoming event.");
+        return;
+      }
 
       setSaving(true);
 
@@ -289,7 +297,7 @@ export function TimetableManagement() {
         roomNumber: formRoomNumber,
         teacherId: formTeacherId || null,
         eventType: formEventType,
-        quizId: formEventType === "quiz" && formQuizMode === "existing" ? formQuizId : null,
+        quizId: (formEventType === "quiz" || formEventType === "exam") && formQuizMode === "existing" ? formQuizId : null,
         inlineQuiz: inlineQuizPayload,
         title: formTitle,
         description: formDescription,
@@ -502,6 +510,12 @@ export function TimetableManagement() {
                                     </div>
                                   )}
 
+                                  {slot.title && (
+                                    <div className="mt-1 text-xs font-semibold text-foreground">
+                                      {slot.title}
+                                    </div>
+                                  )}
+
                                   {slot.quizTitle && (
                                     <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                                       <FileQuestion className="size-3" /> {slot.quizTitle}
@@ -598,6 +612,11 @@ export function TimetableManagement() {
                       {slot.roomNumber && (
                         <div className="flex items-center gap-2">
                           <MapPin className="size-3.5" /> Room {slot.roomNumber}
+                        </div>
+                      )}
+                      {slot.title && (
+                        <div className="text-sm font-semibold text-foreground">
+                          {slot.title}
                         </div>
                       )}
                       {slot.quizTitle && (
@@ -758,6 +777,31 @@ export function TimetableManagement() {
                 </div>
               )}
             </div>
+
+            {/* Examination Selection Section */}
+            {formEventType === "exam" && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20 space-y-3">
+                <h4 className="text-sm font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                  <FileQuestion className="size-4" /> Examination Reference
+                </h4>
+                <div>
+                  <Label className="text-xs">Linked Examination (Optional)</Label>
+                  <Select value={formQuizId} onValueChange={setFormQuizId}>
+                    <SelectTrigger className="mt-1 bg-background">
+                      <SelectValue placeholder="Choose an existing examination..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">None / Unlinked</SelectItem>
+                      {(autoData?.exams || []).map((e: any) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.title} ({e.class_name} - {e.subject})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             {/* Quiz Attachment Section */}
             {formEventType === "quiz" && (
