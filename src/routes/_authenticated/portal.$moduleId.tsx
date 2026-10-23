@@ -32,6 +32,8 @@ import { PublicityManagement } from "@/components/modules/PublicityManagement";
 import { FeesInvoicingManagement } from "@/components/modules/FeesInvoicingManagement";
 import { InvoicesManagement } from "@/components/modules/InvoicesManagement";
 import { LibraryManagement } from "@/components/modules/LibraryManagement";
+import { MessagingManagement } from "@/components/modules/MessagingManagement";
+import { TimetableManagement } from "@/components/modules/TimetableManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -112,6 +114,8 @@ function ModulePage() {
         <InvoicesManagement />
       ) : mod.id === "timetable" ? (
         <TimetableManagement />
+      ) : mod.id === "messaging" ? (
+        <MessagingManagement />
       ) : mod.id === "library" ? (
         <LibraryManagement />
       ) : mod.id === "lessons" ? (
