@@ -6,6 +6,13 @@
  */
 import type { LevelRef } from "./teaching-levels";
 
+export const EDUCATION_LEVELS = [
+  { code: "KG", name: "Kindergarten" },
+  { code: "PRIMARY", name: "Primary School" },
+  { code: "JHS", name: "Junior High School" },
+  { code: "SHS", name: "Senior High School" },
+] as const;
+
 const key = (s: string) => s.trim().toLowerCase();
 
 /** Level code of a named class, or null when the class is unknown. */

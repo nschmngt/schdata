@@ -29,6 +29,7 @@ import { ResultsManagement } from "@/components/modules/ResultsManagement";
 import { LessonsManagement } from "@/components/modules/LessonsManagement";
 import { StudentsManagement } from "@/components/modules/StudentsManagement";
 import { PublicityManagement } from "@/components/modules/PublicityManagement";
+import { FeesInvoicingManagement } from "@/components/modules/FeesInvoicingManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -103,7 +104,9 @@ function ModulePage() {
         </div>
       </header>
 
-      {mod.id === "timetable" ? (
+      {mod.id === "fees-invoicing" ? (
+        <FeesInvoicingManagement />
+      ) : mod.id === "timetable" ? (
         <TimetableManagement />
       ) : mod.id === "lessons" ? (
         <LessonsManagement />
