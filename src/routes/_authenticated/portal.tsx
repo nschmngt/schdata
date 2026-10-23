@@ -10,9 +10,17 @@ import { LogOut, Menu, Building2 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSession } from "@/hooks/useSession";
 import { ACCESS_LABEL, MODULE_CATEGORIES, ROLE_META, modulesFor } from "@/lib/access";
 import { getPortalOverview } from "@/lib/admin.functions";
+import { getConfiguration } from "@/lib/config.functions";
 import { ForcePasswordChange } from "@/components/portal/ForcePasswordChange";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 
@@ -52,6 +60,14 @@ function PortalLayout() {
     queryFn: () => overviewFn({ data: { schoolId: activeSchoolId } }),
     enabled: !!profile,
     staleTime: 60_000,
+  });
+
+  const configFn = useServerFn(getConfiguration);
+  const { data: config } = useQuery({
+    queryKey: ["schools-catalog"],
+    queryFn: () => configFn(),
+    enabled: !!profile && profile.role === "super_admin",
+    staleTime: 5 * 60_000,
   });
 
   const signOut = async (message?: string) => {
@@ -106,10 +122,28 @@ function PortalLayout() {
             <SchoolLogo size="sm" />
             <span className="text-lg font-semibold">{displayName}</span>
           </Link>
-          {overview?.isSuperAdmin ? (
-            <span className="ml-2 flex items-center gap-1 rounded bg-white/10 px-2 py-0.5 text-xs text-ink-muted">
-              <Building2 className="size-3" aria-hidden /> Active Context: {overview.activeSchoolName}
-            </span>
+          {overview?.isSuperAdmin && config?.schools?.length ? (
+            <div className="ml-2 flex items-center gap-1.5 text-xs text-ink-muted">
+              <Building2 className="size-3.5 shrink-0" aria-hidden />
+              <Select
+                value={activeSchoolId || overview.activeSchoolId}
+                onValueChange={(v) => {
+                  setActiveSchoolId(v);
+                  void queryClient.invalidateQueries();
+                }}
+              >
+                <SelectTrigger className="h-7 border-white/20 bg-white/10 text-xs text-ink-foreground hover:bg-white/20">
+                  <SelectValue placeholder="Select active school" />
+                </SelectTrigger>
+                <SelectContent>
+                  {config.schools.map((s: { id: string; name: string; code: string }) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           ) : null}
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:block">

@@ -281,7 +281,7 @@ export const saveClassTeacher = createServerFn({ method: "POST" })
         teacher_phone: data.teacherPhone,
         school_id: tenant.schoolId,
       },
-      { onConflict: "class_name" },
+      { onConflict: "school_id,class_name" },
     );
     if (error) throw new Error(error.message);
     return { ok: true };

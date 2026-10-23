@@ -273,10 +273,9 @@ export const updateAccount = createServerFn({ method: "POST" })
       await assertSuperAdmin(context.supabase, context.userId);
     }
 
-    // Verify target profile belongs to tenant unless Super Admin
     if (!superAdmin) {
       const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
-      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+      if (!targetProfile || targetProfile.school_id !== tenant.schoolId) {
         throw new Error("Forbidden: Cannot update an account belonging to another school.");
       }
     }
@@ -338,7 +337,7 @@ export const setAccountStatus = createServerFn({ method: "POST" })
 
     if (!superAdmin) {
       const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
-      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+      if (!targetProfile || targetProfile.school_id !== tenant.schoolId) {
         throw new Error("Forbidden: Cannot modify status for an account belonging to another school.");
       }
     }
@@ -445,7 +444,7 @@ export const adminResetPassword = createServerFn({ method: "POST" })
 
     if (!superAdmin) {
       const { data: targetProfile } = await supabaseAdmin.from("profiles").select("school_id").eq("id", data.userId).maybeSingle();
-      if (targetProfile?.school_id && targetProfile.school_id !== tenant.schoolId) {
+      if (!targetProfile || targetProfile.school_id !== tenant.schoolId) {
         throw new Error("Forbidden: Cannot reset password for an account belonging to another school.");
       }
     }
@@ -563,7 +562,7 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!profile) throw new Error("No account exists for that email address.");
 
-    if (!superAdmin && profile.school_id && profile.school_id !== tenant.schoolId) {
+    if (!superAdmin && (!profile || profile.school_id !== tenant.schoolId)) {
       throw new Error("Forbidden: Cannot resolve password reset request for an account belonging to another school.");
     }
 
