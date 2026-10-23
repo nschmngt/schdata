@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getRoles, logAudit } from "@/lib/admin.server";
-import { resolveProvisionedSchool } from "@/lib/school.server";
+import { resolveTenantContext } from "@/lib/school.server";
 import {
   allowedStates,
   canExport,
@@ -23,12 +23,9 @@ import {
   valueAt,
 } from "@/lib/archives";
 
-/** Rows fetched per request when scanning (the database caps a single response at 1,000). */
 const CHUNK = 1000;
-/** Safety ceiling for full scans so one request can't run unbounded. */
 const SCAN_CAP = 100_000;
 
-/** Reads every row of an ordered query in 1,000-row chunks, up to SCAN_CAP. */
 async function scanAll(make: () => any): Promise<{ rows: Record<string, unknown>[]; capped: boolean; error: string | null }> {
   const rows: Record<string, unknown>[] = [];
   for (let offset = 0; offset < SCAN_CAP; offset += CHUNK) {
@@ -42,24 +39,23 @@ async function scanAll(make: () => any): Promise<{ rows: Record<string, unknown>
 const MAX_PAGE_SIZE = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Caller's roles, school and the Data Access rules in force for that school. */
 async function accessContext(supabase: any, userId: string) {
-  const school = await resolveProvisionedSchool(supabase);
+  const tenant = await resolveTenantContext(supabase, userId);
   const roles = await getRoles(supabase, userId);
   let rules: any[] = [];
   let exportPayload: Record<string, unknown> | null = null;
-  if (school) {
+  if (tenant.schoolId) {
     const today = new Date().toISOString().slice(0, 10);
     const [r, e] = await Promise.all([
-      supabase.from("finance_rules").select("name, active, conditions").eq("school_id", school.id).eq("rule_key", "record-access-rules").eq("active", true),
-      supabase.from("finance_config_sections").select("payload, effective_from").eq("school_id", school.id).eq("section_key", "export-controls").eq("status", "active").order("version", { ascending: false }),
+      supabase.from("finance_rules").select("name, active, conditions").eq("school_id", tenant.schoolId).eq("rule_key", "record-access-rules").eq("active", true),
+      supabase.from("finance_config_sections").select("payload, effective_from").eq("school_id", tenant.schoolId).eq("section_key", "export-controls").eq("status", "active").order("version", { ascending: false }),
     ]);
     rules = r.data ?? [];
     exportPayload = ((e.data ?? []).find((x: any) => !x.effective_from || x.effective_from <= today)?.payload ?? null) as any;
   }
   const grants = parseAccessRules(rules);
   return {
-    school,
+    school: { id: tenant.schoolId, name: tenant.schoolName },
     roles,
     states: (source: string) => allowedStates(roles, grants, source),
     exportControls: parseExportControls(exportPayload),
@@ -81,7 +77,6 @@ async function retentionRules(supabase: any, schoolId?: string) {
   return (data ?? []) as Parameters<typeof retentionFor>[1];
 }
 
-/** Counts per source and state, plus the retention in force for each. */
 export const getArchiveSummary = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -94,9 +89,11 @@ export const getArchiveSummary = createServerFn({ method: "GET" })
     const sources = await Promise.all(
       ARCHIVE_SOURCES.filter((s) => access.states(s.key).size > 0).map(async (s) => {
         const visible = access.states(s.key);
-        const { rows: data, error } = await scanAll(() =>
-          (supabase as any).from(s.table).select(s.dateColumn).order(s.dateColumn, { ascending: false }),
-        );
+        const { rows: data, error } = await scanAll(() => {
+          let q = (supabase as any).from(s.table).select(s.dateColumn);
+          if (access.school?.id) q = q.eq("school_id", access.school.id);
+          return q.order(s.dateColumn, { ascending: false });
+        });
         const retention = retentionFor(s, rules);
         const counts = { current: 0, archived: 0, "disposal-due": 0 };
         const years = new Set<string>();
@@ -128,7 +125,6 @@ export const getArchiveSummary = createServerFn({ method: "GET" })
     };
   });
 
-/** Date range [from, to] an academic-year label covers, from the calendar's year start month. */
 function yearRange(year: string, cal: ReturnType<typeof defaultCalendar>): [string, string] | null {
   const startYear = Number(year.split("/")[0]);
   if (!Number.isFinite(startYear)) return null;
@@ -150,7 +146,6 @@ const recordsInput = z.object({
 });
 type RecordsInput = z.infer<typeof recordsInput>;
 
-/** Shared read used by viewing and exporting: filters + Data Access states. */
 async function loadRecords(supabase: any, access: Awaited<ReturnType<typeof accessContext>>, data: RecordsInput, everything: boolean) {
   const source = getArchiveSource(data.source);
   if (!source) throw new Error("Unknown archive source.");
@@ -188,6 +183,7 @@ async function loadRecords(supabase: any, access: Awaited<ReturnType<typeof acce
 
   const base = (withCount = false) => {
     let q = supabase.from(source.table).select(source.select, withCount ? { count: "exact" } : undefined);
+    if (access.school?.id) q = q.eq("school_id", access.school.id);
     if (from) q = q.gte(source.dateColumn, from);
     if (to) q = q.lte(source.dateColumn, `${to}T23:59:59.999Z`);
     return q.order(source.dateColumn, { ascending: false });
@@ -204,7 +200,6 @@ async function loadRecords(supabase: any, access: Awaited<ReturnType<typeof acce
     records = ((rows ?? []) as Record<string, unknown>[]).map(toRecord).filter((r) => r.date);
     total = count ?? records.length;
   } else {
-    // State is derived per record (and restricted by Data Access), so filter in memory.
     const { rows, capped, error } = await scanAll(() => base());
     if (error) throw new Error(error);
     const filtered = rows
@@ -218,7 +213,6 @@ async function loadRecords(supabase: any, access: Awaited<ReturnType<typeof acce
   return { source, retention, records, total, truncated };
 }
 
-/** Records of one source, one page at a time, limited to what Data Access allows. */
 export const getArchiveRecords = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => recordsInput.parse(d))
@@ -229,6 +223,7 @@ export const getArchiveRecords = createServerFn({ method: "GET" })
     await logAudit(supabase, context.userId, {
       action: "archive_viewed",
       description: `Viewed ${r.source.label} archive (page ${data.page}, ${r.records.length} of ${r.total} records)`,
+      schoolId: access.school?.id,
     });
     return {
       retention: r.retention,
@@ -241,7 +236,6 @@ export const getArchiveRecords = createServerFn({ method: "GET" })
     };
   });
 
-/** Export: authorized by Export Controls on the server, audited, optionally watermarked. */
 export const exportArchiveRecords = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => recordsInput.parse(d))
@@ -259,6 +253,7 @@ export const exportArchiveRecords = createServerFn({ method: "POST" })
       action: "archive_exported",
       description: `Exported ${r.records.length} ${r.source.label} archive records`,
       details: { source: r.source.key, state: data.state, count: r.records.length, watermark: !!watermark },
+      schoolId: access.school?.id,
     });
     return {
       watermark,

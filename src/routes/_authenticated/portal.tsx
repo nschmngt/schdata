@@ -6,7 +6,7 @@ import { useSchoolName } from "@/hooks/useSchoolName";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, Building2 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -43,12 +43,13 @@ function PortalLayout() {
   const queryClient = useQueryClient();
   const schoolName = useSchoolName();
   const [open, setOpen] = useState(false);
+  const [activeSchoolId, setActiveSchoolId] = useState<string | undefined>(undefined);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const overviewFn = useServerFn(getPortalOverview);
   const { data: overview } = useQuery({
-    queryKey: ["portal-overview"],
-    queryFn: () => overviewFn(),
+    queryKey: ["portal-overview", activeSchoolId],
+    queryFn: () => overviewFn({ data: { schoolId: activeSchoolId } }),
     enabled: !!profile,
     staleTime: 60_000,
   });
@@ -73,7 +74,6 @@ function PortalLayout() {
     );
   }
 
-  // An account suspended while signed in loses access immediately.
   if (profile.status !== "active") {
     void signOut("This account is no longer active. Contact an administrator.");
     return null;
@@ -87,6 +87,7 @@ function PortalLayout() {
 
   const meta = ROLE_META[profile.role];
   const modules = modulesFor(profile.role, profile.access_level);
+  const displayName = overview?.activeSchoolName || schoolName.name;
 
   return (
     <div className="min-h-screen bg-background">
@@ -103,8 +104,13 @@ function PortalLayout() {
           </Button>
           <Link to="/portal" className="flex items-center gap-2.5">
             <SchoolLogo size="sm" />
-            <span className="text-lg font-semibold">{schoolName.name}</span>
+            <span className="text-lg font-semibold">{displayName}</span>
           </Link>
+          {overview?.isSuperAdmin ? (
+            <span className="ml-2 flex items-center gap-1 rounded bg-white/10 px-2 py-0.5 text-xs text-ink-muted">
+              <Building2 className="size-3" aria-hidden /> Active Context: {overview.activeSchoolName}
+            </span>
+          ) : null}
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{profile.full_name || profile.email}</p>

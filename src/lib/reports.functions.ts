@@ -5,6 +5,7 @@ import { CALENDAR_FEATURE_KEY, findPeriod, nextPeriod, parseCalendar } from "@/l
 import { isAttended } from "@/lib/student-summary";
 import { buildBill, rankOf } from "@/lib/reports";
 import { RULES_FEATURE_KEY, assessmentWeights, categoryOf, flag, gradeFromBands, num, parseRules, percentOf } from "@/lib/academic-rules";
+import { resolveTenantContext } from "@/lib/school.server";
 
 const STAFF_ROLES = ["super_admin", "school_manager", "staff"];
 
@@ -13,17 +14,18 @@ async function assertStaff(supabase: any, userId: string) {
   if (!data || !STAFF_ROLES.includes(data.role)) throw new Error("Forbidden");
 }
 
-/** Students and the terms that have assessment records. */
 export const getReportOptions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const [students, terms] = await Promise.all([
       context.supabase
         .from("admissions")
         .select("id, admission_number, student_name, class_admitted")
+        .eq("school_id", tenant.schoolId)
         .order("student_name"),
-      context.supabase.from("student_assessments").select("term").limit(5000),
+      context.supabase.from("student_assessments").select("term").eq("school_id", tenant.schoolId).limit(5000),
     ]);
     if (students.error) throw new Error(students.error.message);
     return {
@@ -32,7 +34,6 @@ export const getReportOptions = createServerFn({ method: "GET" })
     };
   });
 
-/** Build one learner's termly report from Assessment, Attendance and Financial Management. */
 export const getTermlyReport = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -41,18 +42,21 @@ export const getTermlyReport = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     await assertStaff(supabase, context.userId);
+    const tenant = await resolveTenantContext(supabase, context.userId);
 
     const { data: student, error } = await supabase
       .from("admissions")
       .select("id, admission_number, student_name, class_admitted")
       .eq("id", data.admissionId)
+      .eq("school_id", tenant.schoolId)
       .single();
     if (error) throw new Error(error.message);
 
     const { data: classmates } = await supabase
       .from("admissions")
       .select("id")
-      .eq("class_admitted", student.class_admitted);
+      .eq("class_admitted", student.class_admitted)
+      .eq("school_id", tenant.schoolId);
     const classIds = (classmates ?? []).map((c) => c.id);
 
     const [assess, attendance, fees] = await Promise.all([
@@ -60,28 +64,29 @@ export const getTermlyReport = createServerFn({ method: "GET" })
         .from("student_assessments")
         .select("admission_id, subject, assessment_type, score, out_of, created_at")
         .eq("term", data.term)
+        .eq("school_id", tenant.schoolId)
         .in("admission_id", classIds.length ? classIds : [student.id]),
       supabase
         .from("student_attendance")
         .select("status, attendance_date")
-        .eq("admission_id", student.id),
+        .eq("admission_id", student.id)
+        .eq("school_id", tenant.schoolId),
       supabase
         .from("student_fees")
         .select("term, amount_due, amount_paid, created_at")
-        .eq("admission_id", student.id),
+        .eq("admission_id", student.id)
+        .eq("school_id", tenant.schoolId),
     ]);
     if (assess.error) throw new Error(assess.error.message);
 
     const { data: ts } = await supabase
       .from("tenant_settings")
       .select("features")
-      .order("created_at", { ascending: true })
-      .limit(1)
+      .eq("school_id", tenant.schoolId)
       .maybeSingle();
     const rules = parseRules((ts?.features as Record<string, unknown> | null)?.[RULES_FEATURE_KEY]);
     const { classWeight: CLASS_WEIGHT, examWeight: EXAM_WEIGHT } = assessmentWeights(rules);
 
-    // Per student, per subject: average % for class work and for exams, scaled to weights.
     const acc = new Map<string, Map<string, { c: number[]; e: number[] }>>();
     for (const r of assess.data ?? []) {
       const pct = percentOf(Number(r.score), Number(r.out_of));
@@ -123,13 +128,11 @@ export const getTermlyReport = createServerFn({ method: "GET" })
     const overall = [...totals.values()].map((m) => [...m.values()].reduce((s, x) => s + x.total, 0));
     const myOverall = subjects.reduce((s, x) => s + x.total, 0);
 
-    // Attendance has no term column — derive the term's date range from when
-    // its assessment scores were recorded, then count attendance inside it.
     const dates = (assess.data ?? [])
       .map((r) => r.created_at)
       .filter((d): d is string => !!d)
       .sort();
-    // Prefer the configured calendar's date range; fall back to the score dates.
+
     const rawCal = (ts?.features as Record<string, unknown> | null)?.[CALENDAR_FEATURE_KEY];
     const cal = rawCal ? parseCalendar(rawCal) : null;
     const period = cal ? findPeriod(cal, data.term) : null;
@@ -148,7 +151,6 @@ export const getTermlyReport = createServerFn({ method: "GET" })
       subjects,
       position: subjects.length ? rankOf(myOverall, overall) : null,
       numberOnRoll: classIds.length,
-      /** Start of the following term/semester from the academic calendar. */
       nextPeriod: next ? { name: next.name, start: next.start } : null,
       attendance: {
         present: att.filter((a) => isAttended(a.status)).length,

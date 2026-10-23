@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertSuperAdmin, logAudit } from "@/lib/admin.server";
+import { resolveTenantContext } from "@/lib/school.server";
 import {
   brandingSchema,
   educationLevelSchema,
@@ -33,7 +34,6 @@ import { PEOPLE_FEATURE_KEY, parsePeopleRules, peopleRulesSchema } from "@/lib/p
 import { OPS_FEATURE_KEY, opsRulesSchema, parseOpsRules } from "@/lib/operations-rules";
 import { schoolCodeDigits } from "@/lib/numbering";
 
-/** Everything the System Configuration module needs, in one round trip. */
 export const getConfiguration = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -67,8 +67,6 @@ export const getConfiguration = createServerFn({ method: "GET" })
       classes: classes.data ?? [],
     };
   });
-
-/* ----------------------------- schools ----------------------------- */
 
 export const createSchool = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -119,8 +117,6 @@ export const createSchool = createServerFn({ method: "POST" })
       );
     }
 
-    // Provision the tenant's policy + branding rows atomically with the school
-    // so no downstream module ever reads a half-configured tenant.
     const [{ error: sErr }, { error: bErr }] = await Promise.all([
       supabase.from("tenant_settings").insert({
         school_id: school.id,
@@ -143,6 +139,7 @@ export const createSchool = createServerFn({ method: "POST" })
       action: "school_created",
       description: `Provisioned school ${school.name} (${school.code})`,
       details: { schoolId: school.id },
+      schoolId: school.id,
     });
     return school;
   });
@@ -177,6 +174,7 @@ export const updateSchool = createServerFn({ method: "POST" })
       action: "school_updated",
       description: `Updated school configuration`,
       details: { schoolId: id },
+      schoolId: id,
     });
     return { ok: true };
   });
@@ -192,11 +190,10 @@ export const deleteSchool = createServerFn({ method: "POST" })
       action: "school_deleted",
       description: "Removed a school and its scoped configuration",
       details: { schoolId: data.id },
+      schoolId: data.id,
     });
     return { ok: true };
   });
-
-/* -------------------------- catalogue -------------------------- */
 
 export const createEducationLevel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -278,20 +275,16 @@ export const deleteSubject = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/* ------------------------ policy & branding ------------------------ */
-
 export const saveTenantSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => tenantSettingsSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId);
-    // Fresh read so keys owned by other domains ("__"-prefixed: calendar, academic/people rules) are kept.
     const existing = await readCalendarRow(context.supabase, data.schoolId);
     const kept = Object.fromEntries(
       Object.entries(existing?.features ?? {}).filter(([k]) => k.startsWith("__")),
     );
     const features = { ...mergedFeatures(data.features), ...kept } as unknown as Json;
-    // Only write the columns this domain owns; other domains' columns stay untouched.
     const { error } = existing
       ? await context.supabase
           .from("tenant_settings")
@@ -311,6 +304,7 @@ export const saveTenantSettings = createServerFn({ method: "POST" })
       action: "tenant_settings_saved",
       description: "Updated tenant policy and module availability",
       details: { schoolId: data.schoolId },
+      schoolId: data.schoolId,
     });
     return { ok: true };
   });
@@ -342,16 +336,11 @@ export const saveBranding = createServerFn({ method: "POST" })
       action: "branding_saved",
       description: "Updated school branding",
       details: { schoolId: data.schoolId },
+      schoolId: data.schoolId,
     });
     return { ok: true };
   });
 
-/* ---------------------------- numbering ---------------------------- */
-
-/**
- * Upserts one owner's numbering columns, leaving the other owner's untouched.
- * A first save creates the row with the school code derived from the school.
- */
 async function upsertNumbering(supabase: any, schoolId: string, columns: Record<string, unknown>) {
   const { data: existing, error: readErr } = await supabase
     .from("numbering_settings").select("school_id").eq("school_id", schoolId).maybeSingle();
@@ -370,7 +359,6 @@ async function upsertNumbering(supabase: any, schoolId: string, columns: Record<
   if (error) throw new Error(error.message);
 }
 
-/** Admission numbering — edited in Operations Configuration. */
 export const saveAdmissionNumbering = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => admissionNumberingSchema.parse(d))
@@ -387,11 +375,11 @@ export const saveAdmissionNumbering = createServerFn({ method: "POST" })
       action: "numbering_settings_saved",
       description: "Updated admission numbering rules",
       details: { schoolId: data.schoolId, scope: "admission" },
+      schoolId: data.schoolId,
     });
     return { ok: true };
   });
 
-/** School code + employee numbering — edited in System & Platform Configuration. */
 export const saveEmployeeNumbering = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => employeeNumberingSchema.parse(d))
@@ -410,21 +398,19 @@ export const saveEmployeeNumbering = createServerFn({ method: "POST" })
       action: "numbering_settings_saved",
       description: "Updated school code and employee numbering rules",
       details: { schoolId: data.schoolId, scope: "employee" },
+      schoolId: data.schoolId,
     });
     return { ok: true };
   });
 
-/* --------------------------- operations rules --------------------------- */
-
-/** Operations rules for the active school — any signed-in user. */
 export const getOperationsRules = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const row = await readCalendarRow(context.supabase);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const row = await readCalendarRow(context.supabase, tenant.schoolId);
     return parseOpsRules(row?.features?.[OPS_FEATURE_KEY]);
   });
 
-/** Operations Configuration editor: rules + admission numbering for one school. */
 export const getSchoolOperationsSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid() }).parse(d))
@@ -448,25 +434,19 @@ export const saveOperationsRules = createServerFn({ method: "POST" })
       action: "operations_rules_saved",
       description: `Updated operations settings (version ${saved.version})`,
       details: { schoolId: data.schoolId, version: saved.version },
+      schoolId: data.schoolId,
     });
     return { ok: true, version: saved.version };
   });
 
-/* ------------------------- tenant option lists ------------------------- */
-
-/**
- * Positions, departments and schedule types configured under Tenant policy.
- * Readable by any signed-in user so onboarding forms everywhere stay in sync
- * with configuration instead of shipping hardcoded lists.
- */
 export const getTenantOptions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("tenant_settings")
       .select("school_id, positions, departments, schedule_types")
-      .order("created_at", { ascending: true })
-      .limit(1)
+      .eq("school_id", tenant.schoolId)
       .maybeSingle();
     if (error) throw new Error(error.message);
 
@@ -477,38 +457,33 @@ export const getTenantOptions = createServerFn({ method: "GET" })
     };
   });
 
-/** Subject names any signed-in user can pick from (teaching assignments, assessments). */
 export const getSubjectOptions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("subjects")
       .select("name, active")
+      .eq("school_id", tenant.schoolId)
       .order("name");
     if (error) throw new Error(error.message);
     return [...new Set((data ?? []).filter((s) => s.active !== false).map((s) => s.name))];
   });
 
-/** Active subjects with the education level each belongs to. */
 export const getSubjectCatalog = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("subjects")
       .select("name, level_code, active")
+      .eq("school_id", tenant.schoolId)
       .eq("active", true)
       .order("name");
     if (error) throw new Error(error.message);
     return (data ?? []).map((s) => ({ name: s.name, levelCode: s.level_code }));
   });
 
-/* ------------------------------ classes ------------------------------ */
-
-/**
- * Classes belong to an education level the school actually offers, so the
- * catalogue can never drift from what was chosen when the school was
- * provisioned.
- */
 export const createSchoolClass = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => schoolClassSchema.parse(d))
@@ -542,6 +517,7 @@ export const createSchoolClass = createServerFn({ method: "POST" })
       action: "class_created",
       description: `Added class ${data.name}`,
       details: { schoolId: data.schoolId, levelCode: data.levelCode },
+      schoolId: data.schoolId,
     });
     return { ok: true };
   });
@@ -592,13 +568,14 @@ export const deleteSchoolClass = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Active classes, readable by any signed-in user so every module stays in sync. */
 export const getSchoolClasses = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("school_classes")
       .select("id, school_id, level_code, name, sort_order")
+      .eq("school_id", tenant.schoolId)
       .eq("active", true)
       .order("sort_order", { ascending: true });
     if (error) throw new Error(error.message);
@@ -613,12 +590,6 @@ export const getSchoolClasses = createServerFn({ method: "GET" })
     }));
   });
 
-/* ------------------------- academic calendar ------------------------- */
-
-/**
- * Stored inside tenant_settings.features under CALENDAR_FEATURE_KEY so it
- * needs no new table; module switches ignore it (mergedFeatures is boolean-only).
- */
 async function readCalendarRow(supabase: any, schoolId?: string) {
   let q = supabase.from("tenant_settings").select("school_id, features, academic_year_start_month, grading_system");
   q = schoolId ? q.eq("school_id", schoolId) : q.order("created_at", { ascending: true }).limit(1);
@@ -629,11 +600,6 @@ async function readCalendarRow(supabase: any, schoolId?: string) {
 
 export const STALE_SETTINGS_MESSAGE = "These settings were changed by someone else. Reload and try again.";
 
-/**
- * Single write path for a versioned settings entry stored in tenant_settings.features.
- * Rejects stale copies, bumps the version, re-reads right before writing so other
- * domains' keys are preserved, and uses a compare-and-set on the stored version.
- */
 async function writeVersionedFeature<T extends { version: number }>(
   supabase: any,
   schoolId: string,
@@ -662,15 +628,14 @@ async function writeVersionedFeature<T extends { version: number }>(
   return next;
 }
 
-/** The academic calendar for the active school — readable by any signed-in user. */
 export const getAcademicCalendar = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const row = await readCalendarRow(context.supabase);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const row = await readCalendarRow(context.supabase, tenant.schoolId);
     return parseCalendar(row?.features?.[CALENDAR_FEATURE_KEY], row?.academic_year_start_month ?? 9);
   });
 
-/** Calendar for one school (System Configuration editor). */
 export const getSchoolCalendar = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid() }).parse(d))
@@ -696,21 +661,19 @@ export const saveAcademicCalendar = createServerFn({ method: "POST" })
       action: "academic_calendar_saved",
       description: `Academic calendar set to ${data.calendar.periods.length} ${data.calendar.mode}s (${data.calendar.academicYear})`,
       details: { schoolId: data.schoolId, version: saved.version },
+      schoolId: data.schoolId,
     });
     return { ok: true, version: saved.version };
   });
 
-/* ------------------------- academic rules ------------------------- */
-
-/** Grading bands and academic rules for the active school — any signed-in user. */
 export const getAcademicRules = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const row = await readCalendarRow(context.supabase);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const row = await readCalendarRow(context.supabase, tenant.schoolId);
     return parseRules(row?.features?.[RULES_FEATURE_KEY]);
   });
 
-/** Academic Configuration editor: grading system, year start and rules for one school. */
 export const getSchoolAcademicSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid() }).parse(d))
@@ -746,23 +709,21 @@ export const saveAcademicSettings = createServerFn({ method: "POST" })
       action: "academic_rules_saved",
       description: `Updated grading and academic rules (version ${saved.version})`,
       details: { schoolId: data.schoolId, version: saved.version },
+      schoolId: data.schoolId,
     });
     return { ok: true, version: saved.version };
   });
 
-/* -------------------------- people rules -------------------------- */
-
 const peopleList = z.array(z.string().trim().min(1).max(80)).max(60);
 
-/** People rules for the active school — any signed-in user. */
 export const getPeopleRules = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const row = await readCalendarRow(context.supabase);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
+    const row = await readCalendarRow(context.supabase, tenant.schoolId);
     return parsePeopleRules(row?.features?.[PEOPLE_FEATURE_KEY]);
   });
 
-/** People Configuration editor: staff lists and people rules for one school. */
 export const getSchoolPeopleSettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid() }).parse(d))
@@ -806,6 +767,7 @@ export const savePeopleSettings = createServerFn({ method: "POST" })
       action: "people_rules_saved",
       description: `Updated people settings (version ${rules.version})`,
       details: { schoolId: data.schoolId, version: rules.version },
+      schoolId: data.schoolId,
     });
     return { ok: true, version: rules.version };
   });

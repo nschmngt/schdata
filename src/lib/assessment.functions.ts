@@ -4,16 +4,18 @@ import { assertPeriodOpen, loadRules } from "@/lib/academic-calendar.server";
 import { activeAssessmentTypes, num } from "@/lib/academic-rules";
 import { assertTeaches, loadTeachingScope } from "@/lib/teaching.server";
 import { assessmentIdSchema, assessmentInputSchema } from "@/lib/assessment.schemas";
+import { resolveTenantContext } from "@/lib/school.server";
 
-/** Students available for assessment entry — teachers see only classes they teach. */
 export const getAssessmentStudents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
     if (!scope.isAdmin && scope.classes.length === 0) return [];
     let q = context.supabase
       .from("admissions")
       .select("id, admission_number, student_name, class_admitted, parent_name, parent_phone")
+      .eq("school_id", tenant.schoolId)
       .order("student_name");
     if (!scope.isAdmin) q = q.in("class_admitted", scope.classes);
     const { data, error } = await q;
@@ -21,10 +23,10 @@ export const getAssessmentStudents = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** All assessment records with the student attached. */
 export const listAssessments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
     if (!scope.isAdmin && scope.pairs.length === 0) return [];
     let q = context.supabase
@@ -32,6 +34,7 @@ export const listAssessments = createServerFn({ method: "GET" })
       .select(
         "id, admission_id, class_name, term, subject, assessment_type, score, out_of, remark, created_at, admissions(student_name, admission_number)",
       )
+      .eq("school_id", tenant.schoolId)
       .order("created_at", { ascending: false })
       .limit(5000);
     if (!scope.isAdmin) q = q.in("class_name", scope.classes).in("subject", scope.subjects);
@@ -60,11 +63,11 @@ export const listAssessments = createServerFn({ method: "GET" })
     });
   });
 
-/** Create or update one assessment record. */
 export const saveAssessment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => assessmentInputSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { period: data.term });
     const scope = await loadTeachingScope(context.supabase, context.userId);
     assertTeaches(scope, data.className, data.subject);
@@ -80,8 +83,13 @@ export const saveAssessment = createServerFn({ method: "POST" })
 
     if (data.id) {
       const { data: existing } = await context.supabase
-        .from("student_assessments").select("class_name, subject").eq("id", data.id).maybeSingle();
-      if (existing) assertTeaches(scope, existing.class_name, existing.subject);
+        .from("student_assessments")
+        .select("class_name, subject")
+        .eq("id", data.id)
+        .eq("school_id", tenant.schoolId)
+        .maybeSingle();
+      if (!existing) throw new Error("Assessment record not found or access denied.");
+      assertTeaches(scope, existing.class_name, existing.subject);
     }
     const row = {
       admission_id: data.admissionId,
@@ -92,13 +100,15 @@ export const saveAssessment = createServerFn({ method: "POST" })
       score: data.score,
       out_of: resolvedOutOf,
       remark: data.remark,
+      school_id: tenant.schoolId,
     };
 
     if (data.id) {
       const { error } = await context.supabase
         .from("student_assessments")
         .update(row)
-        .eq("id", data.id);
+        .eq("id", data.id)
+        .eq("school_id", tenant.schoolId);
       if (error) throw new Error(error.message);
       return { id: data.id, updated: true };
     }
@@ -112,21 +122,26 @@ export const saveAssessment = createServerFn({ method: "POST" })
     return { id: inserted.id, updated: false };
   });
 
-/** Remove one assessment record. */
 export const deleteAssessment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => assessmentIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
     const { data: existing } = await context.supabase
-      .from("student_assessments").select("class_name, subject, term").eq("id", data.id).maybeSingle();
-    if (!existing) throw new Error("Record not found.");
+      .from("student_assessments")
+      .select("class_name, subject, term")
+      .eq("id", data.id)
+      .eq("school_id", tenant.schoolId)
+      .maybeSingle();
+    if (!existing) throw new Error("Record not found or access denied.");
     await assertPeriodOpen(context.supabase, { period: existing.term });
     assertTeaches(scope, existing.class_name, existing.subject);
     const { error } = await context.supabase
       .from("student_assessments")
       .delete()
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .eq("school_id", tenant.schoolId);
     if (error) throw new Error(error.message);
     return { deleted: true };
   });

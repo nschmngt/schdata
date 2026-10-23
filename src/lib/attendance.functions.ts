@@ -3,14 +3,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertPeriodOpen, loadRules } from "@/lib/academic-calendar.server";
 import { registerQuerySchema, saveAttendanceSchema } from "@/lib/attendance.schemas";
+import { resolveTenantContext } from "@/lib/school.server";
 
-/**
- * Attendance is for administrators and for staff who carry class teacher
- * responsibility (assigned under Admissions) — nobody else.
- */
 export const getAttendanceAccess = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data: profile } = await context.supabase
       .from("profiles")
       .select("role, email")
@@ -25,7 +23,8 @@ export const getAttendanceAccess = createServerFn({ method: "GET" })
 
     const { data: rows } = await context.supabase
       .from("class_teachers")
-      .select("class_name, teacher_id, teacher_email");
+      .select("class_name, teacher_id, teacher_email")
+      .eq("school_id", tenant.schoolId);
     const email = (profile?.email ?? "").toLowerCase();
     const classes = (rows ?? [])
       .filter(
@@ -37,13 +36,13 @@ export const getAttendanceAccess = createServerFn({ method: "GET" })
     return { allowed: classes.length > 0, isAdmin: false, classes };
   });
 
-/** Classes that actually have admitted students, plus their class teacher. */
 export const getAttendanceClasses = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const [{ data: admissions, error }, { data: teachers }] = await Promise.all([
-      context.supabase.from("admissions").select("class_admitted"),
-      context.supabase.from("class_teachers").select("class_name, teacher_name"),
+      context.supabase.from("admissions").select("class_admitted").eq("school_id", tenant.schoolId),
+      context.supabase.from("class_teachers").select("class_name, teacher_name").eq("school_id", tenant.schoolId),
     ]);
     if (error) throw new Error(error.message);
 
@@ -63,15 +62,16 @@ export const getAttendanceClasses = createServerFn({ method: "GET" })
       }));
   });
 
-/** The register for one class on one date, with any attendance already recorded. */
 export const getClassRegister = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => registerQuerySchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data: students, error } = await context.supabase
       .from("admissions")
       .select("id, admission_number, student_name, parent_name, parent_phone")
       .eq("class_admitted", data.className)
+      .eq("school_id", tenant.schoolId)
       .order("student_name");
     if (error) throw new Error(error.message);
 
@@ -82,6 +82,7 @@ export const getClassRegister = createServerFn({ method: "POST" })
         .from("student_attendance")
         .select("admission_id, status, note")
         .eq("attendance_date", data.date)
+        .eq("school_id", tenant.schoolId)
         .in("admission_id", ids);
       if (attError) throw new Error(attError.message);
       existing = rows ?? [];
@@ -98,11 +99,11 @@ export const getClassRegister = createServerFn({ method: "POST" })
     };
   });
 
-/** Save (or update) the register. One row per student per day. */
 export const saveAttendance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => saveAttendanceSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { date: data.date });
     const backdate = attendanceBackdateReason(await loadRules(context.supabase), data.date);
     if (backdate) throw new Error(backdate);
@@ -112,6 +113,7 @@ export const saveAttendance = createServerFn({ method: "POST" })
         attendance_date: data.date,
         status: e.status,
         note: e.note ?? "",
+        school_id: tenant.schoolId,
       })),
       { onConflict: "admission_id,attendance_date" },
     );
@@ -119,13 +121,14 @@ export const saveAttendance = createServerFn({ method: "POST" })
     return { saved: data.entries.length };
   });
 
-/** Recent registers, summarised by class and date. */
 export const getAttendanceHistory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("student_attendance")
       .select("attendance_date, status, admissions(class_admitted)")
+      .eq("school_id", tenant.schoolId)
       .order("attendance_date", { ascending: false })
       .limit(1000);
     if (error) throw new Error(error.message);

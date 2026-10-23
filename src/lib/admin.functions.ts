@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { assertPeriodOpen } from "@/lib/academic-calendar.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { resolveTenantContext } from "@/lib/school.server";
 import {
   adminResetSchema,
   bulkImportSchema,
@@ -13,7 +14,6 @@ import {
   resetRequestSchema,
   resolveResetRequestSchema,
   securitySettingsSchema,
-
   setupSchema,
   statusSchema,
   updateAccountSchema,
@@ -27,10 +27,7 @@ import {
   logAudit,
 } from "@/lib/admin.server";
 
-/** Has the system already been initialised with a super admin? */
 export const getSetupStatus = createServerFn({ method: "GET" }).handler(async () => {
-  // Without the service key the roles table can't be checked; assume an
-  // existing system so visitors reach sign-in instead of a blank screen.
   if (!process.env["SUPABASE_SERVICE_ROLE_KEY"] && !process.env["SERVICE_ROLE_KEY"]) {
     console.error("[setup] SUPABASE_SERVICE_ROLE_KEY is not configured.");
     return { initialised: true, hasManager: true };
@@ -47,7 +44,6 @@ export const getSetupStatus = createServerFn({ method: "GET" }).handler(async ()
   return { initialised: (count ?? 0) > 0, hasManager: (managers ?? 0) > 0 };
 });
 
-/** One-time bootstrap: creates the initial Super Admin and School Manager accounts. */
 export const runInitialSetup = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => setupSchema.parse(d))
   .handler(async ({ data }) => {
@@ -58,6 +54,14 @@ export const runInitialSetup = createServerFn({ method: "POST" })
       .select("id", { count: "exact", head: true })
       .eq("role", "super_admin");
     if ((count ?? 0) > 0) throw new Error("Setup has already been completed for this system.");
+
+    const { data: primarySchool } = await supabaseAdmin
+      .from("schools")
+      .select("id")
+      .order("active", { ascending: false })
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
 
     const created: string[] = [];
     const pairs = [
@@ -81,6 +85,7 @@ export const runInitialSetup = createServerFn({ method: "POST" })
         role,
         access_level: DEFAULT_LEVEL[role] as "super_administrator",
         status: "active",
+        school_id: primarySchool?.id ?? null,
       });
       await supabaseAdmin.from("user_roles").insert({ user_id: user.user.id, role });
       created.push(account.email);
@@ -88,16 +93,8 @@ export const runInitialSetup = createServerFn({ method: "POST" })
     return { created };
   });
 
-/** Minimum gap before a repeat reset request for the same email is recorded. */
 const RESET_REQUEST_COOLDOWN_MS = 15 * 60 * 1000;
 
-/**
- * Public: raise a password reset request. Only an admin can actually reset the
- * password. Hardened against abuse: requests are only recorded for emails that
- * match an existing account, repeats within the cooldown window are dropped
- * instead of modifying the pending row, and the response is always identical
- * so it never reveals whether the account exists.
- */
 export const requestPasswordReset = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => resetRequestSchema.parse(d))
   .handler(async ({ data }) => {
@@ -105,10 +102,9 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     const email = data.email.trim().toLowerCase();
     const note = data.note?.trim() || null;
 
-    // Only record requests for real accounts; the response stays generic either way.
     const { data: account } = await supabaseAdmin
       .from("profiles")
-      .select("id")
+      .select("id, school_id")
       .eq("email", email)
       .maybeSingle();
     if (!account) return { ok: true };
@@ -121,9 +117,6 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (existing) {
-      // Throttle: a fresh pending request already covers this account; repeats
-      // within the cooldown must not modify it (prevents queue flooding and
-      // note tampering by unauthenticated callers).
       const age = Date.now() - new Date(existing.created_at).getTime();
       if (age < RESET_REQUEST_COOLDOWN_MS) return { ok: true };
       await supabaseAdmin
@@ -136,34 +129,33 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
         action: "reset_requested",
         description: `Password reset requested for ${email}`,
         target_email: email,
+        school_id: account.school_id,
       });
     }
     return { ok: true };
   });
 
-
 type AdminClient = typeof import("@/integrations/supabase/client.server")["supabaseAdmin"];
 
-/**
- * Replace the classes/subjects a teacher teaches. Every class × subject pair
- * is stored as its own row, so a teacher can carry several of each. Cleared
- * for anyone who is not on the Teacher position.
- */
 async function syncTeachingAssignments(
   client: AdminClient,
   teacherId: string,
   position: string | null | undefined,
   classes: string[] | undefined,
   subjects: string[] | undefined,
+  schoolId?: string | null,
 ) {
   const isTeacher = (position ?? "").trim().toLowerCase() === "teacher";
-  let rows: { teacher_id: string; class_name: string; subject: string }[] = [];
+  let rows: { teacher_id: string; class_name: string; subject: string; school_id?: string | null }[] = [];
   if (isTeacher && (classes?.length ?? 0) > 0) {
     const { matchTeachingPairs, teachingLevelError } = await import("@/lib/teaching-levels");
-    const [{ data: cls }, { data: subs }] = await Promise.all([
-      client.from("school_classes").select("name, level_code").eq("active", true),
-      client.from("subjects").select("name, level_code").eq("active", true),
-    ]);
+    let clsQuery = client.from("school_classes").select("name, level_code").eq("active", true);
+    let subsQuery = client.from("subjects").select("name, level_code").eq("active", true);
+    if (schoolId) {
+      clsQuery = clsQuery.eq("school_id", schoolId);
+      subsQuery = subsQuery.eq("school_id", schoolId);
+    }
+    const [{ data: cls }, { data: subs }] = await Promise.all([clsQuery, subsQuery]);
     const result = matchTeachingPairs(
       classes ?? [],
       subjects ?? [],
@@ -172,33 +164,42 @@ async function syncTeachingAssignments(
     );
     const problem = teachingLevelError(result);
     if (problem) throw new Error(problem);
-    rows = result.pairs.map((p) => ({ teacher_id: teacherId, ...p }));
+    rows = result.pairs.map((p) => ({ teacher_id: teacherId, ...p, school_id: schoolId }));
   }
   await client.from("teaching_assignments").delete().eq("teacher_id", teacherId);
   if (rows.length === 0) return;
-  const { error } = await client.from("teaching_assignments").insert(rows);
+  const { error } = await client.from("teaching_assignments").insert(rows as any);
   if (error) throw new Error(error.message);
 }
 
-/** Admin: list all accounts. */
 export const listAccounts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { data, error } = await context.supabase
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data?.schoolId);
+
+    let query = context.supabase
       .from("profiles")
       .select(ACCOUNT_COLUMNS)
       .order("created_at", { ascending: false });
+
+    if (tenant.schoolId) {
+      query = query.eq("school_id", tenant.schoolId);
+    }
+
+    const { data: accounts, error } = await query;
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return accounts ?? [];
   });
 
-/** Admin: create a user account. There is no self sign-up anywhere in the app. */
 export const createAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => createAccountSchema.parse(d))
+  .inputValidator((d: unknown) => createAccountSchema.extend({ schoolId: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data.schoolId);
+
     if (
       (data.role === "super_admin" || data.role === "school_manager") &&
       !(await isSuperAdmin(context.supabase, context.userId))
@@ -233,6 +234,7 @@ export const createAccount = createServerFn({ method: "POST" })
       position: data.position || null,
       salary: data.salary ?? null,
       start_date: data.startDate || null,
+      school_id: tenant.schoolId,
     });
     if (profileError) {
       await supabaseAdmin.auth.admin.deleteUser(user.user.id);
@@ -245,6 +247,7 @@ export const createAccount = createServerFn({ method: "POST" })
       data.position,
       data.teachingClasses,
       data.teachingSubjects,
+      tenant.schoolId,
     );
 
     await logAudit(context.supabase, context.userId, {
@@ -252,11 +255,11 @@ export const createAccount = createServerFn({ method: "POST" })
       description: `Created account for ${data.email} (${data.role})`,
       targetUserId: user.user.id,
       targetEmail: data.email,
+      schoolId: tenant.schoolId,
     });
     return { id: user.user.id };
   });
 
-/** Admin: update an existing account. */
 export const updateAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => updateAccountSchema.parse(d))
@@ -310,7 +313,6 @@ export const updateAccount = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Admin: activate or suspend an account. */
 export const setAccountStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => statusSchema.parse(d))
@@ -331,7 +333,6 @@ export const setAccountStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Super Admin: permanently delete an account. */
 export const deleteAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => deleteAccountSchema.parse(d))
@@ -357,12 +358,12 @@ export const deleteAccount = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Admin: bulk import accounts from CSV rows. */
 export const bulkImportAccounts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => bulkImportSchema.parse(d))
+  .inputValidator((d: unknown) => bulkImportSchema.extend({ schoolId: z.string().uuid().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data.schoolId);
     const superAdmin = await isSuperAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -393,6 +394,7 @@ export const bulkImportAccounts = createServerFn({ method: "POST" })
         status: "active",
         department: row.department || null,
         class_name: row.className || null,
+        school_id: tenant.schoolId,
       });
       await supabaseAdmin.from("user_roles").insert({ user_id: user.user.id, role: row.role });
       created += 1;
@@ -401,11 +403,11 @@ export const bulkImportAccounts = createServerFn({ method: "POST" })
     await logAudit(context.supabase, context.userId, {
       action: "bulk_import",
       description: `Bulk import: ${created} created, ${failed.length} failed`,
+      schoolId: tenant.schoolId,
     });
     return { created, failed };
   });
 
-/** Admin: reset another user's password. Users can never reset their own. */
 export const adminResetPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => adminResetSchema.parse(d))
@@ -424,7 +426,7 @@ export const adminResetPassword = createServerFn({ method: "POST" })
 
     const target = await supabaseAdmin
       .from("profiles")
-      .select("email")
+      .select("email, school_id")
       .eq("id", data.userId)
       .maybeSingle();
     if (target.data?.email) {
@@ -444,17 +446,15 @@ export const adminResetPassword = createServerFn({ method: "POST" })
       description: `Password reset for ${target.data?.email ?? data.userId}`,
       targetUserId: data.userId,
       targetEmail: target.data?.email ?? null,
+      schoolId: target.data?.school_id,
     });
     return { ok: true };
   });
 
-/** Admin: recent password reset requests. */
 export const listResetRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    // Reset requests' own-row policies read auth.users, which signed-in roles cannot;
-    // admins are verified above, so read through the privileged client.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
       .from("password_reset_requests")
@@ -465,10 +465,6 @@ export const listResetRequests = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/**
- * Admin: approve a pending reset request (sets the new password and forces a
- * change on next sign-in) or reject it. Approval requires the account to exist.
- */
 export const resolveResetRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => resolveResetRequestSchema.parse(d))
@@ -504,7 +500,7 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("id, email")
+      .select("id, email, school_id")
       .ilike("email", request.email)
       .maybeSingle();
     if (!profile) throw new Error("No account exists for that email address.");
@@ -530,11 +526,11 @@ export const resolveResetRequest = createServerFn({ method: "POST" })
       description: `Approved password reset for ${profile.email}`,
       targetUserId: profile.id,
       targetEmail: profile.email,
+      schoolId: profile.school_id,
     });
     return { ok: true, status: "completed" as const };
   });
 
-/** Admin: remove a handled reset request from the queue. */
 export const deleteResetRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => resetRequestIdSchema.parse(d))
@@ -549,40 +545,51 @@ export const deleteResetRequest = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-
-/** Admin: audit log feed. */
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { data, error } = await context.supabase
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data?.schoolId);
+
+    let query = context.supabase
       .from("audit_logs")
-      .select("id, action, description, actor_id, actor_email, target_email, created_at")
+      .select("id, action, description, actor_id, actor_email, target_email, created_at, school_id")
       .order("created_at", { ascending: false })
       .limit(200);
+
+    if (tenant.schoolId) {
+      query = query.eq("school_id", tenant.schoolId);
+    }
+
+    const { data: logs, error } = await query;
     if (error) throw new Error(error.message);
-    return data ?? [];
+    return logs ?? [];
   });
 
-/** Super Admin: clear the audit trail. */
 export const clearAuditLogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data?.schoolId);
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("audit_logs")
-      .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000");
+    let deleteQuery = supabaseAdmin.from("audit_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (tenant.schoolId) {
+      deleteQuery = deleteQuery.eq("school_id", tenant.schoolId);
+    }
+    const { error } = await deleteQuery;
     if (error) throw new Error(error.message);
+
     await logAudit(context.supabase, context.userId, {
       action: "audit_cleared",
       description: "Audit logs cleared",
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
 
-/** Admin: read system security settings. */
 export const getSecuritySettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -597,7 +604,6 @@ export const getSecuritySettings = createServerFn({ method: "GET" })
     return data;
   });
 
-/** Super Admin: save system security settings. */
 export const saveSecuritySettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => securitySettingsSchema.parse(d))
@@ -624,7 +630,6 @@ export const saveSecuritySettings = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Super Admin: force every non-admin user to change their password on next reset. */
 export const forcePasswordChangeAll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -642,7 +647,6 @@ export const forcePasswordChangeAll = createServerFn({ method: "POST" })
     return { affected: count ?? 0 };
   });
 
-/** Super Admin: suspend every account except your own. */
 export const lockAllAccounts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -660,7 +664,6 @@ export const lockAllAccounts = createServerFn({ method: "POST" })
     return { affected: count ?? 0 };
   });
 
-/** Any signed-in user: stamp last login and record the event in the audit trail. */
 export const recordLogin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -670,7 +673,7 @@ export const recordLogin = createServerFn({ method: "POST" })
       .from("profiles")
       .update({ last_login: now })
       .eq("id", context.userId)
-      .select("email, role")
+      .select("email, role, school_id")
       .maybeSingle();
 
     await supabaseAdmin.from("audit_logs").insert({
@@ -680,16 +683,11 @@ export const recordLogin = createServerFn({ method: "POST" })
       actor_email: profile?.email ?? null,
       target_user_id: context.userId,
       target_email: profile?.email ?? null,
+      school_id: profile?.school_id,
     });
     return { ok: true };
   });
 
-/**
- * Any signed-in user: change their own password. This is the only self-service
- * password path in the system and exists solely so a user forced to change
- * after an administrator reset can clear that flag. It cannot be used to reset
- * anybody else's password.
- */
 export const changeOwnPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => changeOwnPasswordSchema.parse(d))
@@ -704,7 +702,7 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
       .from("profiles")
       .update({ force_password_change: false, password_reset_at: new Date().toISOString() })
       .eq("id", context.userId)
-      .select("email")
+      .select("email, school_id")
       .maybeSingle();
 
     await supabaseAdmin.from("audit_logs").insert({
@@ -714,25 +712,27 @@ export const changeOwnPassword = createServerFn({ method: "POST" })
       actor_email: profile?.email ?? null,
       target_user_id: context.userId,
       target_email: profile?.email ?? null,
+      school_id: profile?.school_id,
     });
     return { ok: true };
   });
 
-/**
- * Any signed-in user: the activity feed and session policy the portal home
- * needs. Non-admins only ever see their own events.
- */
 export const getPortalOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({ schoolId: z.string().uuid().optional() }).optional().parse(d))
+  .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data?.schoolId);
     const admin = await isAdmin(context.supabase, context.userId);
 
     let query = context.supabase
       .from("audit_logs")
-      .select("id, action, description, actor_email, created_at")
+      .select("id, action, description, actor_email, created_at, school_id")
       .order("created_at", { ascending: false })
       .limit(8);
+
     if (!admin) query = query.eq("actor_id", context.userId);
+    if (tenant.schoolId) query = query.eq("school_id", tenant.schoolId);
+
     const { data: activity } = await query;
 
     let pendingResets = 0;
@@ -752,10 +752,12 @@ export const getPortalOverview = createServerFn({ method: "GET" })
       activity: activity ?? [],
       pendingResets,
       sessionTimeout: settings?.session_timeout ?? 30,
+      activeSchoolId: tenant.schoolId,
+      activeSchoolName: tenant.schoolName,
+      isSuperAdmin: tenant.isSuperAdmin,
     };
   });
 
-/** Admin: every account plus its role rows, for the User Verification checks. */
 export const getUserVerificationData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -772,7 +774,6 @@ export const getUserVerificationData = createServerFn({ method: "GET" })
     };
   });
 
-/** Set or clear the signed-in user's own profile picture (resized data URL). */
 export const setMyAvatar = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>

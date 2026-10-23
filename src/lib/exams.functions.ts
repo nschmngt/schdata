@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertPeriodOpen, loadRules } from "@/lib/academic-calendar.server";
 import { assertTeaches, loadTeachingScope } from "@/lib/teaching.server";
+import { resolveTenantContext } from "@/lib/school.server";
 import {
   examIdSchema,
   examInputSchema,
@@ -10,8 +11,7 @@ import {
   syncToAssessmentSchema,
 } from "@/lib/exams.schemas";
 
-/** Helper to find admission record for current student user. */
-async function findStudentAdmission(supabase: any, userId: string) {
+async function findStudentAdmission(supabase: any, userId: string, schoolId?: string) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, role")
@@ -20,34 +20,37 @@ async function findStudentAdmission(supabase: any, userId: string) {
 
   if (!profile) return null;
 
-  const { data: admission } = await supabase
+  let query = supabase
     .from("admissions")
     .select("id, class_admitted, student_name")
-    .or(`id.eq.${userId},student_name.ilike.${profile.full_name}`)
-    .maybeSingle();
+    .or(`id.eq.${userId},student_name.ilike.${profile.full_name}`);
 
+  if (schoolId) query = query.eq("school_id", schoolId);
+
+  const { data: admission } = await query.maybeSingle();
   return admission;
 }
 
-/** List exams accessible to current user (admins see all, teachers see scope, students see class exams). */
 export const listExams = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
+
     let q = context.supabase
       .from("exams_quizzes")
       .select("*, exam_questions(count), exam_submissions(id, student_id, status, total_score)")
+      .eq("school_id", tenant.schoolId)
       .order("created_at", { ascending: false });
 
     if (!scope.isAdmin) {
       if (scope.classes.length > 0) {
         q = q.in("class_name", scope.classes);
       } else {
-        const admission = await findStudentAdmission(context.supabase, context.userId);
+        const admission = await findStudentAdmission(context.supabase, context.userId, tenant.schoolId);
         if (admission?.class_admitted) {
           q = q.eq("class_name", admission.class_admitted).in("status", ["published", "closed", "archived"]);
         } else {
-          // Fallback for students: allow viewing all published/closed exams
           q = q.in("status", ["published", "closed", "archived"]);
         }
       }
@@ -58,20 +61,21 @@ export const listExams = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-/** Fetch full details of an exam, including questions and existing submission if any. */
 export const getExamDetails = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => examIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
 
     const { data: exam, error } = await context.supabase
       .from("exams_quizzes")
       .select("*, exam_questions(*)")
       .eq("id", data.id)
+      .eq("school_id", tenant.schoolId)
       .single();
 
-    if (error || !exam) throw new Error("Exam not found.");
+    if (error || !exam) throw new Error("Exam not found or access denied.");
 
     if (!scope.isAdmin) {
       if (scope.classes.length > 0) {
@@ -79,22 +83,20 @@ export const getExamDetails = createServerFn({ method: "GET" })
       }
     }
 
-    // Sort questions by orderIndex
     const rawQuestions = ((exam.exam_questions as any[]) || []).sort(
       (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
     );
 
-    // Fetch existing submission
     const { data: submission } = await context.supabase
       .from("exam_submissions")
       .select("*, exam_answers(*)")
       .eq("exam_id", exam.id)
       .eq("student_id", context.userId)
+      .eq("school_id", tenant.schoolId)
       .maybeSingle();
 
     const isStudent = !scope.isAdmin && scope.classes.length === 0;
 
-    // Map questions to camelCase for UI compatibility and sanitize for students
     const questions = rawQuestions.map((q) => {
       const questionObj = {
         id: q.id,
@@ -121,11 +123,11 @@ export const getExamDetails = createServerFn({ method: "GET" })
     };
   });
 
-/** Create or update an exam and its questions. */
 export const saveExam = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => examInputSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { period: data.term });
     const scope = await loadTeachingScope(context.supabase, context.userId);
     assertTeaches(scope, data.className, data.subject);
@@ -146,6 +148,7 @@ export const saveExam = createServerFn({ method: "POST" })
       start_time: data.startTime ? new Date(data.startTime).toISOString() : null,
       end_time: data.endTime ? new Date(data.endTime).toISOString() : null,
       created_by: context.userId,
+      school_id: tenant.schoolId,
     };
 
     let examId = data.id;
@@ -154,7 +157,8 @@ export const saveExam = createServerFn({ method: "POST" })
       const { error } = await context.supabase
         .from("exams_quizzes")
         .update(examRow)
-        .eq("id", examId);
+        .eq("id", examId)
+        .eq("school_id", tenant.schoolId);
       if (error) throw new Error(error.message);
     } else {
       const { data: inserted, error } = await context.supabase
@@ -166,7 +170,6 @@ export const saveExam = createServerFn({ method: "POST" })
       examId = inserted.id;
     }
 
-    // Save questions
     if (data.questions && data.questions.length > 0) {
       if (data.id) {
         await context.supabase.from("exam_questions").delete().eq("exam_id", examId);
@@ -190,56 +193,58 @@ export const saveExam = createServerFn({ method: "POST" })
     return { id: examId, success: true };
   });
 
-/** Delete an exam. */
 export const deleteExam = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => examIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
     const { data: existing } = await context.supabase
       .from("exams_quizzes")
       .select("class_name, subject, term")
       .eq("id", data.id)
+      .eq("school_id", tenant.schoolId)
       .maybeSingle();
 
     if (!existing) throw new Error("Exam not found.");
     await assertPeriodOpen(context.supabase, { period: existing.term });
     assertTeaches(scope, existing.class_name, existing.subject);
 
-    const { error } = await context.supabase.from("exams_quizzes").delete().eq("id", data.id);
+    const { error } = await context.supabase.from("exams_quizzes").delete().eq("id", data.id).eq("school_id", tenant.schoolId);
     if (error) throw new Error(error.message);
     return { success: true };
   });
 
-/** Start an exam attempt for a student. */
 export const startExamAttempt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => examIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data: exam, error } = await context.supabase
       .from("exams_quizzes")
       .select("status, term")
       .eq("id", data.id)
+      .eq("school_id", tenant.schoolId)
       .single();
 
-    if (error || !exam) throw new Error("Exam not found.");
+    if (error || !exam) throw new Error("Exam not found or access denied.");
     if (exam.status !== "published") throw new Error("This exam is not active.");
 
     await assertPeriodOpen(context.supabase, { period: exam.term });
 
-    // Check for existing attempt
     const { data: existing } = await context.supabase
       .from("exam_submissions")
       .select("id, status")
       .eq("exam_id", data.id)
       .eq("student_id", context.userId)
+      .eq("school_id", tenant.schoolId)
       .maybeSingle();
 
     if (existing) {
       return { submissionId: existing.id, status: existing.status };
     }
 
-    const admission = await findStudentAdmission(context.supabase, context.userId);
+    const admission = await findStudentAdmission(context.supabase, context.userId, tenant.schoolId);
 
     const { data: inserted, error: subErr } = await context.supabase
       .from("exam_submissions")
@@ -249,6 +254,7 @@ export const startExamAttempt = createServerFn({ method: "POST" })
         admission_id: admission?.id ?? null,
         started_at: new Date().toISOString(),
         status: "in_progress",
+        school_id: tenant.schoolId,
       })
       .select("id")
       .single();
@@ -257,11 +263,11 @@ export const startExamAttempt = createServerFn({ method: "POST" })
     return { submissionId: inserted.id, status: "in_progress" };
   });
 
-/** Submit student answers for auto-grading (MCQ / True-False) and manual grading queue. */
 export const submitExamAnswers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => submitExamSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { data: questions } = await context.supabase
       .from("exam_questions")
       .select("*")
@@ -310,27 +316,29 @@ export const submitExamAnswers = createServerFn({ method: "POST" })
         status: submissionStatus,
         total_score: calculatedTotalScore,
       })
-      .eq("id", data.submissionId);
+      .eq("id", data.submissionId)
+      .eq("school_id", tenant.schoolId);
 
     if (subErr) throw new Error(subErr.message);
 
     return { success: true, status: submissionStatus, score: calculatedTotalScore };
   });
 
-/** Grade subjective answers and finalize total submission score. */
 export const gradeSubmission = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => gradeSubmissionSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
 
     const { data: sub } = await context.supabase
       .from("exam_submissions")
       .select("*, exams_quizzes(class_name, subject)")
       .eq("id", data.submissionId)
+      .eq("school_id", tenant.schoolId)
       .single();
 
-    if (!sub) throw new Error("Submission not found.");
+    if (!sub) throw new Error("Submission not found or access denied.");
 
     const examInfo = sub.exams_quizzes as any;
     assertTeaches(scope, examInfo.class_name, examInfo.subject);
@@ -360,24 +368,26 @@ export const gradeSubmission = createServerFn({ method: "POST" })
         total_score: totalScore,
         feedback: data.overallFeedback,
       })
-      .eq("id", data.submissionId);
+      .eq("id", data.submissionId)
+      .eq("school_id", tenant.schoolId);
 
     if (error) throw new Error(error.message);
 
     return { success: true, totalScore };
   });
 
-/** Sync exam score directly into central student_assessments table. */
 export const syncExamToAssessment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => syncToAssessmentSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
 
     const { data: sub } = await context.supabase
       .from("exam_submissions")
       .select("*, exams_quizzes(*)")
       .eq("id", data.submissionId)
+      .eq("school_id", tenant.schoolId)
       .single();
 
     if (!sub || !sub.admission_id) throw new Error("Valid student admission required for sync.");
@@ -397,32 +407,35 @@ export const syncExamToAssessment = createServerFn({ method: "POST" })
       score: sub.total_score,
       out_of: exam.total_marks,
       remark: `${exam.title} (${assessmentType})`,
+      school_id: tenant.schoolId,
     });
 
     if (error) throw new Error(error.message);
     return { success: true };
   });
 
-/** List all student submissions for an exam. */
 export const listSubmissions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => examIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const scope = await loadTeachingScope(context.supabase, context.userId);
 
     const { data: exam } = await context.supabase
       .from("exams_quizzes")
       .select("class_name, subject")
       .eq("id", data.id)
+      .eq("school_id", tenant.schoolId)
       .single();
 
-    if (!exam) throw new Error("Exam not found.");
+    if (!exam) throw new Error("Exam not found or access denied.");
     assertTeaches(scope, exam.class_name, exam.subject);
 
     const { data: submissions, error } = await context.supabase
       .from("exam_submissions")
       .select("*, admissions(student_name, admission_number), profiles(full_name), exam_answers(*, exam_questions(*))")
       .eq("exam_id", data.id)
+      .eq("school_id", tenant.schoolId)
       .order("submitted_at", { ascending: false });
 
     if (error) throw new Error(error.message);

@@ -4,18 +4,20 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin } from "@/lib/admin.server";
 import { eligibleForOffer } from "@/lib/offer-letter";
 import { PEOPLE_FEATURE_KEY, letterTerms, parsePeopleRules } from "@/lib/people-rules";
+import { resolveTenantContext } from "@/lib/school.server";
 
 export const getAppointmentLetter = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid(), kind: z.enum(["account", "offer"]) }).parse(input))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenantContext = await resolveTenantContext(context.supabase, context.userId);
     const db = context.supabase;
     const [schools, branding, signers, managers] = await Promise.all([
       db.from("schools").select("id, name, postal_address, town, community, district, region, gps_address").eq("active", true).order("name"),
       db.from("school_branding").select("school_id, display_name, logo_url"),
       db.from("profiles").select("id, full_name, email").eq("role", "super_admin").eq("status", "active").order("full_name"),
-      db.from("profiles").select("full_name").eq("role", "school_manager").eq("status", "active").order("full_name"),
+      db.from("profiles").select("full_name").eq("role", "school_manager").eq("status", "active").eq("school_id", tenantContext.schoolId).order("full_name"),
     ]);
     const failure = schools.error ?? branding.error ?? signers.error ?? managers.error;
     if (failure) throw new Error(failure.message);
@@ -32,8 +34,8 @@ export const getAppointmentLetter = createServerFn({ method: "GET" })
     }
     const yearStart = `${employee.onboardedAt.slice(0, 4)}-01-01T00:00:00Z`;
     const seqQuery = data.kind === "account"
-      ? db.from("profiles").select("id", { count: "exact", head: true }).in("role", ["staff", "school_manager"])
-      : db.from("offer_letters").select("id", { count: "exact", head: true });
+      ? db.from("profiles").select("id", { count: "exact", head: true }).in("role", ["staff", "school_manager"]).eq("school_id", tenantContext.schoolId)
+      : db.from("offer_letters").select("id", { count: "exact", head: true }).eq("school_id", tenantContext.schoolId);
     const [numbering, seqCount, tenant] = await Promise.all([
       db.from("numbering_settings").select("school_id, school_code, employee_year_digits, employee_sequence_digits, employee_sequence_start"),
       seqQuery.gte("created_at", yearStart).lte("created_at", employee.onboardedAt),

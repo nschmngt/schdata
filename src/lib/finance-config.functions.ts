@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { resolveProvisionedSchool } from "@/lib/school.server";
+import { resolveTenantContext } from "@/lib/school.server";
 import type { Json } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertSuperAdmin, isSuperAdmin } from "@/lib/admin.server";
@@ -42,11 +42,11 @@ async function audit(
   });
 }
 
-/** Everything the Financial Configuration module needs for one school. */
 export const getFinanceConfiguration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => schoolScope.partial().parse(d ?? {}))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId, data.schoolId);
     const { supabase } = context;
 
     const { data: schools, error: sErr } = await supabase
@@ -56,7 +56,7 @@ export const getFinanceConfiguration = createServerFn({ method: "POST" })
       .order("created_at");
     if (sErr) throw new Error(sErr.message);
 
-    const schoolId = data.schoolId ?? schools?.[0]?.id ?? null;
+    const schoolId = tenant.schoolId;
     if (!schoolId) {
       return { schools: schools ?? [], schoolId: null, sections: [], items: [], rules: [], audit: [] };
     }
@@ -102,19 +102,14 @@ export const getFinanceConfiguration = createServerFn({ method: "POST" })
     };
   });
 
-/**
- * The read path every other financial module uses: only what is in force
- * today. Any signed-in user may read it, because it drives pickers and
- * labels across the finance screens.
- */
 export const getActiveFinanceConfig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
     const today = new Date().toISOString().slice(0, 10);
 
-    const school = await resolveProvisionedSchool(supabase);
-    if (!school)
+    const tenant = await resolveTenantContext(supabase, context.userId);
+    if (!tenant.schoolId)
       return {
         schoolId: null as string | null,
         currencyFallback: { code: "GHS", locale: "en-GH" },
@@ -122,25 +117,25 @@ export const getActiveFinanceConfig = createServerFn({ method: "GET" })
         items: [],
         rules: [],
       };
-    await autoSeedIfEmpty(context as Ctx, school.id);
+    await autoSeedIfEmpty(context as Ctx, tenant.schoolId);
 
     const [sections, items, rules] = await Promise.all([
       supabase
         .from("finance_config_sections")
         .select("section_key, payload, effective_from, version")
-        .eq("school_id", school.id)
+        .eq("school_id", tenant.schoolId)
         .eq("status", "active")
         .order("version", { ascending: false }),
       supabase
         .from("finance_reference_items")
         .select("*")
-        .eq("school_id", school.id)
+        .eq("school_id", tenant.schoolId)
         .eq("active", true)
         .order("sort_order"),
       supabase
         .from("finance_rules")
         .select("*")
-        .eq("school_id", school.id)
+        .eq("school_id", tenant.schoolId)
         .eq("active", true)
         .order("priority"),
     ]);
@@ -153,15 +148,13 @@ export const getActiveFinanceConfig = createServerFn({ method: "GET" })
     }
 
     return {
-      schoolId: school.id as string | null,
-      currencyFallback: { code: school.currency, locale: school.locale },
+      schoolId: tenant.schoolId as string | null,
+      currencyFallback: { code: tenant.currency, locale: tenant.locale },
       settings,
       items: items.data ?? [],
       rules: rules.data ?? [],
     };
   });
-
-/* --------------------------- settings sections --------------------------- */
 
 export const saveFinanceSection = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -269,8 +262,6 @@ export const setFinanceSectionStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/* ----------------------------- reference lists ----------------------------- */
-
 export const saveFinanceItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => referenceItemSchema.parse(d))
@@ -358,11 +349,6 @@ export const deleteFinanceConfigRow = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/**
- * Writes the platform starting point for a school: the categories, methods
- * and statuses that used to be hardcoded, plus the default settings
- * documents, activated straight away. Existing entries are never touched.
- */
 async function writeDefaults(ctx: Ctx, schoolId: string) {
   const { supabase } = ctx;
   const { data: school, error: sErr } = await supabase
@@ -430,12 +416,6 @@ async function writeDefaults(ctx: Ctx, schoolId: string) {
   return { items: rows.length, sections: sectionRows.length };
 }
 
-/**
- * Automatic loading: a school with no configuration at all gets the platform
- * defaults the first time a Super Admin opens any finance screen. Schools
- * that already have configuration are left alone, so deleted defaults stay
- * deleted.
- */
 async function autoSeedIfEmpty(ctx: Ctx, schoolId: string) {
   const [{ count: itemCount }, { count: sectionCount }] = await Promise.all([
     ctx.supabase.from("finance_reference_items").select("id", { count: "exact", head: true }).eq("school_id", schoolId),

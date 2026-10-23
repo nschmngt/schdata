@@ -2,12 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const ADMIN_ROLES = new Set(["super_admin", "school_manager"]);
 
-/**
- * Reads the caller's roles. The role-check helpers live in a private schema and
- * are not exposed through the API, so we read the role rows directly (the
- * caller can always read their own roles under RLS) and fall back to the
- * profile role. Super Admin is never restricted anywhere in the app.
- */
 export async function getRoles(supabase: SupabaseClient, userId: string): Promise<string[]> {
   const roles = new Set<string>();
 
@@ -57,13 +51,16 @@ export async function logAudit(
     targetUserId?: string | null;
     targetEmail?: string | null;
     details?: Record<string, unknown>;
+    schoolId?: string | null;
   },
 ) {
   const { data: actor } = await supabase
     .from("profiles")
-    .select("email")
+    .select("email, school_id")
     .eq("id", actorId)
     .maybeSingle();
+
+  const schoolId = entry.schoolId ?? actor?.school_id ?? null;
 
   await supabase.from("audit_logs").insert({
     action: entry.action,
@@ -73,8 +70,9 @@ export async function logAudit(
     target_user_id: entry.targetUserId ?? null,
     target_email: entry.targetEmail ?? null,
     details: entry.details ?? {},
+    school_id: schoolId,
   });
 }
 
 export const ACCOUNT_COLUMNS =
-  "id, full_name, email, username, role, access_level, status, gender, department, class_name, two_factor_enabled, permissions, force_password_change, last_login, created_at, phone, position, employee_id, admission_number, salary, start_date";
+  "id, full_name, email, username, role, access_level, status, gender, department, class_name, two_factor_enabled, permissions, force_password_change, last_login, created_at, phone, position, employee_id, admission_number, salary, start_date, school_id";

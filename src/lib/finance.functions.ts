@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin, logAudit } from "@/lib/admin.server";
 import { classLevelCode } from "@/lib/education-levels.server";
 import { levelScopeError } from "@/lib/education-levels";
+import { resolveTenantContext } from "@/lib/school.server";
 import {
   deleteSchema,
   expenseSchema,
@@ -14,29 +15,32 @@ import {
   payrollSchema,
 } from "@/lib/finance.schemas";
 
-/** Everything the Financial Management module needs, in one round trip. */
 export const getFinancialOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     const { supabase } = context;
 
     const [income, expenses, payroll, fees, students, staff] = await Promise.all([
-      supabase.from("finance_income").select("*").order("entry_date", { ascending: false }),
-      supabase.from("finance_expenses").select("*").order("entry_date", { ascending: false }),
-      supabase.from("finance_payroll").select("*").order("created_at", { ascending: false }),
+      supabase.from("finance_income").select("*").eq("school_id", tenant.schoolId).order("entry_date", { ascending: false }),
+      supabase.from("finance_expenses").select("*").eq("school_id", tenant.schoolId).order("entry_date", { ascending: false }),
+      supabase.from("finance_payroll").select("*").eq("school_id", tenant.schoolId).order("created_at", { ascending: false }),
       supabase
         .from("student_fees")
         .select("*, admissions(admission_number, student_name, class_admitted)")
+        .eq("school_id", tenant.schoolId)
         .order("created_at", { ascending: false }),
       supabase
         .from("admissions")
         .select("id, admission_number, student_name, class_admitted")
+        .eq("school_id", tenant.schoolId)
         .order("student_name"),
       supabase
         .from("profiles")
         .select("id, full_name, employee_id, position, department, salary")
         .in("role", ["staff", "school_manager"])
+        .eq("school_id", tenant.schoolId)
         .order("full_name"),
     ]);
 
@@ -58,6 +62,7 @@ export const addIncome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => incomeSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { date: data.entryDate });
     await assertAdmin(context.supabase, context.userId);
     const { error } = await context.supabase.from("finance_income").insert({
@@ -67,12 +72,14 @@ export const addIncome = createServerFn({ method: "POST" })
       amount: data.amount,
       status: data.status,
       created_by: context.userId,
+      school_id: tenant.schoolId,
     });
     if (error) throw new Error(error.message);
     await logAudit(context.supabase, context.userId, {
       action: "income_recorded",
       description: `Recorded income: ${data.description}`,
       details: { amount: data.amount, category: data.category },
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
@@ -81,6 +88,7 @@ export const addExpense = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => expenseSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { date: data.entryDate });
     await assertAdmin(context.supabase, context.userId);
     const { error } = await context.supabase.from("finance_expenses").insert({
@@ -90,12 +98,14 @@ export const addExpense = createServerFn({ method: "POST" })
       amount: data.amount,
       status: data.status,
       created_by: context.userId,
+      school_id: tenant.schoolId,
     });
     if (error) throw new Error(error.message);
     await logAudit(context.supabase, context.userId, {
       action: "expense_recorded",
       description: `Recorded expense: ${data.description}`,
       details: { amount: data.amount, category: data.category },
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
@@ -104,6 +114,7 @@ export const addPayrollEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => payrollSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     if (data.period) await assertPeriodOpen(context.supabase, { period: periodOfLabel(data.period) });
     await assertAdmin(context.supabase, context.userId);
     const { error } = await context.supabase.from("finance_payroll").insert({
@@ -116,20 +127,22 @@ export const addPayrollEntry = createServerFn({ method: "POST" })
       deductions: data.deductions,
       period: data.period || null,
       created_by: context.userId,
+      school_id: tenant.schoolId,
     });
     if (error) throw new Error(error.message);
     await logAudit(context.supabase, context.userId, {
       action: "payroll_entry_added",
       description: `Added payroll entry for ${data.employeeName}`,
       details: { basicSalary: data.basicSalary },
+      schoolId: tenant.schoolId,
     });
     return { ok: true };
   });
 
-/** Pulls every staff account that has no payroll entry yet into the payroll run. */
 export const importStaffPayroll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertAdmin(context.supabase, context.userId);
     const { supabase } = context;
 
@@ -137,8 +150,9 @@ export const importStaffPayroll = createServerFn({ method: "POST" })
       supabase
         .from("profiles")
         .select("id, full_name, employee_id, position, salary")
-        .in("role", ["staff", "school_manager"]),
-      supabase.from("finance_payroll").select("staff_id"),
+        .in("role", ["staff", "school_manager"])
+        .eq("school_id", tenant.schoolId),
+      supabase.from("finance_payroll").select("staff_id").eq("school_id", tenant.schoolId),
     ]);
     if (sErr ?? eErr) throw new Error((sErr ?? eErr)!.message);
 
@@ -154,6 +168,7 @@ export const importStaffPayroll = createServerFn({ method: "POST" })
         allowances: 0,
         deductions: 0,
         created_by: context.userId,
+        school_id: tenant.schoolId,
       }));
     if (rows.length === 0) return { added: 0 };
 
@@ -162,15 +177,16 @@ export const importStaffPayroll = createServerFn({ method: "POST" })
     return { added: rows.length };
   });
 
-/** Marks every pending payroll entry as processed. */
 export const processPayroll = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("finance_payroll")
       .update({ status: "processed" })
       .eq("status", "pending")
+      .eq("school_id", tenant.schoolId)
       .select("id, net_salary");
     if (error) throw new Error(error.message);
 
@@ -179,6 +195,7 @@ export const processPayroll = createServerFn({ method: "POST" })
       action: "payroll_processed",
       description: `Processed payroll for ${data?.length ?? 0} employees`,
       details: { total },
+      schoolId: tenant.schoolId,
     });
     return { processed: data?.length ?? 0, total };
   });
@@ -187,6 +204,7 @@ export const addStudentFee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => feeSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertPeriodOpen(context.supabase, { period: periodOfLabel(data.term) });
     await assertAdmin(context.supabase, context.userId);
     if (data.feeCode) {
@@ -196,9 +214,10 @@ export const addStudentFee = createServerFn({ method: "POST" })
           .select("name, metadata")
           .eq("list_key", "fee-categories")
           .eq("code", data.feeCode)
+          .eq("school_id", tenant.schoolId)
           .limit(1)
           .maybeSingle(),
-        context.supabase.from("admissions").select("class_admitted").eq("id", data.admissionId).maybeSingle(),
+        context.supabase.from("admissions").select("class_admitted").eq("id", data.admissionId).eq("school_id", tenant.schoolId).maybeSingle(),
       ]);
       if (item) {
         const level = await classLevelCode(context.supabase, learner?.class_admitted);
@@ -213,6 +232,7 @@ export const addStudentFee = createServerFn({ method: "POST" })
       amount_paid: data.amountPaid,
       due_date: data.dueDate || (await calendarPeriodEnd(context.supabase, periodOfLabel(data.term))) || null,
       status: data.status,
+      school_id: tenant.schoolId,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -222,6 +242,7 @@ export const updateStudentFee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => feeUpdateSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertAdmin(context.supabase, context.userId);
     const { error } = await context.supabase
       .from("student_fees")
@@ -229,7 +250,8 @@ export const updateStudentFee = createServerFn({ method: "POST" })
         ...(data.amountPaid !== undefined ? { amount_paid: data.amountPaid } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
       })
-      .eq("id", data.id);
+      .eq("id", data.id)
+      .eq("school_id", tenant.schoolId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -238,8 +260,9 @@ export const deleteFinanceRecord = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => deleteSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const tenant = await resolveTenantContext(context.supabase, context.userId);
     await assertAdmin(context.supabase, context.userId);
-    const { error } = await context.supabase.from(data.table).delete().eq("id", data.id);
+    const { error } = await context.supabase.from(data.table).delete().eq("id", data.id).eq("school_id", tenant.schoolId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
