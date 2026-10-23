@@ -5,6 +5,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin, logAudit } from "@/lib/admin.server";
 import { classLevelCode } from "@/lib/education-levels.server";
 import { levelScopeError } from "@/lib/education-levels";
+import { calculatePaymentStatus } from "@/lib/finance";
 import {
   deleteSchema,
   expenseSchema,
@@ -206,13 +207,16 @@ export const addStudentFee = createServerFn({ method: "POST" })
         if (err) throw new Error(err);
       }
     }
+    const dueDate = data.dueDate || (await calendarPeriodEnd(context.supabase, periodOfLabel(data.term))) || null;
+    const computedStatus = data.status ?? calculatePaymentStatus(data.amountPaid, data.amountDue, dueDate);
+
     const { error } = await context.supabase.from("student_fees").insert({
       admission_id: data.admissionId,
       term: data.term,
       amount_due: data.amountDue,
       amount_paid: data.amountPaid,
-      due_date: data.dueDate || (await calendarPeriodEnd(context.supabase, periodOfLabel(data.term))) || null,
-      status: data.status,
+      due_date: dueDate,
+      status: computedStatus,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -223,14 +227,39 @@ export const updateStudentFee = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => feeUpdateSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
+
+    // Fetch existing row to accurately compute status if not explicitly overridden
+    const { data: existing, error: fetchErr } = await context.supabase
+      .from("student_fees")
+      .select("amount_due, amount_paid, due_date, status")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!existing) throw new Error("Student fee record not found.");
+
+    const amountDue = data.amountDue ?? Number(existing.amount_due ?? 0);
+    const amountPaid = data.amountPaid ?? Number(existing.amount_paid ?? 0);
+    const dueDate = existing.due_date;
+
+    const nextStatus = data.status ?? calculatePaymentStatus(amountPaid, amountDue, dueDate);
+
     const { error } = await context.supabase
       .from("student_fees")
       .update({
+        ...(data.amountDue !== undefined ? { amount_due: data.amountDue } : {}),
         ...(data.amountPaid !== undefined ? { amount_paid: data.amountPaid } : {}),
-        ...(data.status !== undefined ? { status: data.status } : {}),
+        status: nextStatus,
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
+
+    await logAudit(context.supabase, context.userId, {
+      action: "student_fee_updated",
+      description: `Updated student fee ${data.id}`,
+      details: { amountPaid, amountDue, status: nextStatus },
+    });
+
     return { ok: true };
   });
 
