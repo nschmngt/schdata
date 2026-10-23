@@ -102,7 +102,9 @@ function ModulePage() {
         </div>
       </header>
 
-      {mod.id === "lessons" ? (
+      {mod.id === "timetable" ? (
+        <TimetableManagement />
+      ) : mod.id === "lessons" ? (
         <LessonsManagement />
       ) : mod.id === "students" ? (
         <StudentsManagement />
