@@ -27,6 +27,7 @@ import { isConfigDomain } from "@/lib/config-domains";
 import { useSchoolName } from "@/hooks/useSchoolName";
 import { ResultsManagement } from "@/components/modules/ResultsManagement";
 import { LessonsManagement } from "@/components/modules/LessonsManagement";
+import { StudentsManagement } from "@/components/modules/StudentsManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -103,6 +104,8 @@ function ModulePage() {
 
       {mod.id === "lessons" ? (
         <LessonsManagement />
+      ) : mod.id === "students" ? (
+        <StudentsManagement />
       ) : mod.id === "exams-quizzes" ? (
         <ExamsQuizzes />
       ) : mod.id === "user-management" ? (
