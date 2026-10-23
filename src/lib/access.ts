@@ -24,6 +24,7 @@ import {
   Archive,
   Landmark,
   Settings2,
+  Megaphone,
 } from "lucide-react";
 
 export type Role = "super_admin" | "school_manager" | "staff" | "student" | "parent";
@@ -115,6 +116,14 @@ export const MODULES: ModuleDef[] = [
     icon: LayoutDashboard,
     category: "Operations",
     roles: ALL,
+  },
+  {
+    id: "publicity",
+    name: "Publicity",
+    description: "Manage public notice board, circulars, banner slideshows, articles and media gallery.",
+    icon: Megaphone,
+    category: "Operations",
+    roles: ADMINS,
   },
   {
     id: "admissions",

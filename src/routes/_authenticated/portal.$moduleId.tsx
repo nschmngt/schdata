@@ -113,6 +113,8 @@ function ModulePage() {
         <StudentsManagement />
       ) : mod.id === "exams-quizzes" ? (
         <ExamsQuizzes />
+      ) : mod.id === "publicity" ? (
+        <PublicityManagement />
       ) : mod.id === "user-management" ? (
         <UserManagement />
       ) : mod.id === "staff-management" ? (
