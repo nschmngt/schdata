@@ -13,6 +13,7 @@ import {
   ClipboardList,
   FileText,
   BookOpenCheck,
+  BookOpen,
   ClipboardCheck,
   HeartHandshake,
   TrendingUp,
@@ -139,6 +140,14 @@ export const MODULES: ModuleDef[] = [
     icon: CalendarCheck,
     category: "Academics",
     roles: STAFF_UP,
+  },
+  {
+    id: "lessons",
+    name: "Lessons",
+    description: "Course lessons, intro video learning, downloadable content, and lesson completion quizzes.",
+    icon: BookOpen,
+    category: "Academics",
+    roles: ALL,
   },
   {
     id: "assignments",
