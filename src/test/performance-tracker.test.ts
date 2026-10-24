@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { defaultRules } from "../lib/academic-rules";
 import {
+  calculateAssessmentTypeBreakdown,
   calculateAttendanceRate,
   calculateInterventionEffectiveness,
   calculateStudentOverallAverage,
@@ -53,7 +54,7 @@ describe("Performance Tracker - Pure Business Logic", () => {
     expect(result.taskCount).toBe(2);
   });
 
-  it("excludes excused assessments from denominator", () => {
+  it("excludes excused assessments and preserves ungraded without zero-drop", () => {
     const scores: ScoreItem[] = [
       {
         admissionId: "stud-1",
@@ -70,6 +71,16 @@ describe("Performance Tracker - Pure Business Logic", () => {
         className: "Primary 1",
         term: "Term 1",
         subject: "Science",
+        assessmentType: "Homework",
+        score: 0,
+        outOf: 100,
+        status: "ungraded",
+      },
+      {
+        admissionId: "stud-1",
+        className: "Primary 1",
+        term: "Term 1",
+        subject: "Science",
         assessmentType: "Exam",
         score: 90,
         outOf: 100,
@@ -79,7 +90,52 @@ describe("Performance Tracker - Pure Business Logic", () => {
 
     const result = calculateStudentSubjectScore(scores, "Science", academicRules);
     expect(result.totalPercent).toBe(90);
-    expect(result.taskCount).toBe(1);
+    expect(result.assessedCount).toBe(1);
+    expect(result.unassessedCount).toBe(1);
+    expect(result.excusedCount).toBe(1);
+  });
+
+  it("calculates assessment type breakdowns correctly", () => {
+    const scores: ScoreItem[] = [
+      {
+        admissionId: "stud-1",
+        className: "JHS 1",
+        term: "Term 1",
+        subject: "Math",
+        assessmentType: "Quiz",
+        score: 80,
+        outOf: 100,
+        status: "assessed",
+      },
+      {
+        admissionId: "stud-1",
+        className: "JHS 1",
+        term: "Term 1",
+        subject: "Math",
+        assessmentType: "Quiz",
+        score: 100,
+        outOf: 100,
+        status: "assessed",
+      },
+      {
+        admissionId: "stud-1",
+        className: "JHS 1",
+        term: "Term 1",
+        subject: "Math",
+        assessmentType: "Exam",
+        score: 70,
+        outOf: 100,
+        status: "assessed",
+      },
+    ];
+
+    const breakdown = calculateAssessmentTypeBreakdown(scores);
+    const quiz = breakdown.find((b) => b.assessmentType === "Quiz");
+    const exam = breakdown.find((b) => b.assessmentType === "Exam");
+
+    expect(quiz?.avgScorePercent).toBe(90);
+    expect(quiz?.taskCount).toBe(2);
+    expect(exam?.avgScorePercent).toBe(70);
   });
 
   it("calculates overall academic average across subjects", () => {

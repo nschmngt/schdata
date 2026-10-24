@@ -14,10 +14,10 @@ export interface ScoreItem {
   term: string;
   academicYear?: string;
   subject: string;
-  assessmentType: string; // e.g., Exam, Homework, Quiz, Assignment
+  assessmentType: string; // e.g., Exam, Homework, Quiz, Assignment, Classwork
   score: number;
   outOf: number;
-  status?: "assessed" | "not_submitted" | "ungraded" | "excused" | "absent";
+  status?: "assessed" | "not_yet_assessed" | "not_submitted" | "ungraded" | "excused" | "absent";
   recordedAt?: string;
 }
 
@@ -95,35 +95,77 @@ export interface ProgressTrendPoint {
   attendanceRate: number | null;
 }
 
+export interface AssessmentTypeBreakdown {
+  assessmentType: string;
+  avgScorePercent: number | null;
+  taskCount: number;
+  assessedCount: number;
+  ungradedCount: number;
+}
+
 /**
  * Calculates student's normalized subject total score considering weighted
- * classwork vs exam split configured in Academic Rules.
+ * classwork vs exam split configured in Academic Rules, strictly distinguishing
+ * between unassessed, ungraded, excused, absent, and submitted records.
  */
 export function calculateStudentSubjectScore(
   scores: ScoreItem[],
   subject: string,
   rules: AcademicRules,
-): { totalPercent: number | null; classPercent: number | null; examPercent: number | null; taskCount: number } {
+): {
+  totalPercent: number | null;
+  classPercent: number | null;
+  examPercent: number | null;
+  taskCount: number;
+  assessedCount: number;
+  unassessedCount: number;
+  excusedCount: number;
+} {
   const subjectScores = scores.filter(
-    (s) => s.subject.toLowerCase() === subject.toLowerCase() && s.status !== "excused",
+    (s) => s.subject.toLowerCase() === subject.toLowerCase(),
   );
 
   if (subjectScores.length === 0) {
-    return { totalPercent: null, classPercent: null, examPercent: null, taskCount: 0 };
+    return {
+      totalPercent: null,
+      classPercent: null,
+      examPercent: null,
+      taskCount: 0,
+      assessedCount: 0,
+      unassessedCount: 0,
+      excusedCount: 0,
+    };
   }
 
   const { classWeight, examWeight } = assessmentWeights(rules);
 
   const classTasks: number[] = [];
   const examTasks: number[] = [];
+  let assessedCount = 0;
+  let unassessedCount = 0;
+  let excusedCount = 0;
 
   for (const s of subjectScores) {
-    // Exclude unassessed/excused records from denominator unless marked absent/not_submitted
-    if (s.status === "ungraded") continue;
+    if (s.status === "excused") {
+      excusedCount++;
+      continue;
+    }
+
+    if (s.status === "ungraded" || s.status === "not_yet_assessed") {
+      unassessedCount++;
+      continue; // Preserve grading policy: unassessed/ungraded items are NOT silently treated as zero
+    }
+
+    let scorePct = 0;
+    if (s.status === "absent" || s.status === "not_submitted") {
+      scorePct = 0; // Explicit non-submission or absent evaluation
+      assessedCount++;
+    } else {
+      scorePct = percentOf(s.score, s.outOf);
+      assessedCount++;
+    }
 
     const cat = categoryOf(rules, s.assessmentType);
-    const scorePct = percentOf(s.score, s.outOf);
-
     if (cat === "class") {
       classTasks.push(scorePct);
     } else {
@@ -137,7 +179,15 @@ export function calculateStudentSubjectScore(
     examTasks.length > 0 ? examTasks.reduce((a, b) => a + b, 0) / examTasks.length : null;
 
   if (classAvg === null && examAvg === null) {
-    return { totalPercent: null, classPercent: null, examPercent: null, taskCount: 0 };
+    return {
+      totalPercent: null,
+      classPercent: null,
+      examPercent: null,
+      taskCount: assessedCount,
+      assessedCount,
+      unassessedCount,
+      excusedCount,
+    };
   }
 
   let totalPercent = 0;
@@ -153,7 +203,10 @@ export function calculateStudentSubjectScore(
     totalPercent: Math.round(totalPercent * 10) / 10,
     classPercent: classAvg !== null ? Math.round(classAvg * 10) / 10 : null,
     examPercent: examAvg !== null ? Math.round(examAvg * 10) / 10 : null,
-    taskCount: classTasks.length + examTasks.length,
+    taskCount: assessedCount,
+    assessedCount,
+    unassessedCount,
+    excusedCount,
   };
 }
 
@@ -174,6 +227,51 @@ export function calculateStudentOverallAverage(
   }
   if (percents.length === 0) return null;
   return Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10;
+}
+
+/**
+ * Groups scores by assessment type (e.g. Exam, Quiz, Classwork, Homework, Assignment)
+ * and calculates average performance for each assessment type.
+ */
+export function calculateAssessmentTypeBreakdown(
+  scores: ScoreItem[],
+): AssessmentTypeBreakdown[] {
+  const typeMap = new Map<string, { scores: number[]; ungraded: number; total: number }>();
+
+  for (const s of scores) {
+    const typeKey = (s.assessmentType || "Classwork").trim();
+    if (!typeMap.has(typeKey)) {
+      typeMap.set(typeKey, { scores: [], ungraded: 0, total: 0 });
+    }
+    const entry = typeMap.get(typeKey)!;
+    entry.total++;
+
+    if (s.status === "excused") continue;
+    if (s.status === "ungraded" || s.status === "not_yet_assessed") {
+      entry.ungraded++;
+      continue;
+    }
+
+    const pct = s.status === "absent" || s.status === "not_submitted" ? 0 : percentOf(s.score, s.outOf);
+    entry.scores.push(pct);
+  }
+
+  const result: AssessmentTypeBreakdown[] = [];
+  for (const [typeKey, data] of typeMap.entries()) {
+    const avgScorePercent =
+      data.scores.length > 0
+        ? Math.round((data.scores.reduce((a, b) => a + b, 0) / data.scores.length) * 10) / 10
+        : null;
+    result.push({
+      assessmentType: typeKey,
+      avgScorePercent,
+      taskCount: data.total,
+      assessedCount: data.scores.length,
+      ungradedCount: data.ungraded,
+    });
+  }
+
+  return result.sort((a, b) => a.assessmentType.localeCompare(b.assessmentType));
 }
 
 /**
