@@ -72,4 +72,9 @@ export function categoryLabel(
   return list.find((c) => c.value === value)?.label ?? value;
 }
 
+export function formatCurrency(amount: number | string | null | undefined, currencyCode = "GHS") {
+  const val = Number(amount ?? 0) || 0;
+  return `${currencyCode} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export const today = () => new Date().toISOString().slice(0, 10);

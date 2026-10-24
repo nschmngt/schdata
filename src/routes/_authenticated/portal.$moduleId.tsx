@@ -34,6 +34,7 @@ import { InvoicesManagement } from "@/components/modules/InvoicesManagement";
 import { LibraryManagement } from "@/components/modules/LibraryManagement";
 import { MessagingManagement } from "@/components/modules/MessagingManagement";
 import { TimetableManagement } from "@/components/modules/TimetableManagement";
+import { PerformanceTrackerManagement } from "@/components/modules/PerformanceTrackerManagement";
 
 
 export const Route = createFileRoute("/_authenticated/portal/$moduleId")({
@@ -108,7 +109,9 @@ function ModulePage() {
         </div>
       </header>
 
-      {mod.id === "fees-invoicing" ? (
+      {mod.id === "performance-tracker" ? (
+        <PerformanceTrackerManagement />
+      ) : mod.id === "fees-invoicing" ? (
         <FeesInvoicingManagement />
       ) : mod.id === "invoices" ? (
         <InvoicesManagement />
