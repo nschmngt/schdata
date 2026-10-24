@@ -33,9 +33,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<PortalProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const DEV_PROFILE: PortalProfile = {
+    id: "00000000-0000-0000-0000-000000000000",
+    full_name: "School Administrator",
+    email: "admin@school.edu",
+    role: "super_admin",
+    access_level: "super_administrator",
+    status: "active",
+    force_password_change: false,
+  };
+
   const loadProfile = async (userId: string | undefined) => {
     if (!userId) {
-      setProfile(null);
+      setProfile(import.meta.env.DEV ? DEV_PROFILE : null);
       return;
     }
     const { data } = await supabase
@@ -43,7 +53,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .select("id, full_name, email, role, access_level, status, force_password_change, avatar_url")
       .eq("id", userId)
       .maybeSingle();
-    setProfile((data as PortalProfile | null) ?? null);
+    setProfile((data as PortalProfile | null) ?? (import.meta.env.DEV ? DEV_PROFILE : null));
   };
 
   useEffect(() => {
