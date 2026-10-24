@@ -12,6 +12,7 @@ import {
   updateInterventionSchema,
 } from "./performance-tracker.schemas";
 import {
+  calculateAssessmentTypeBreakdown,
   calculateAttendanceRate,
   calculateInterventionEffectiveness,
   calculateStudentOverallAverage,
@@ -42,6 +43,7 @@ export function parsePerformanceRiskRules(raw: unknown) {
 
 /**
  * Returns dashboard KPI indicators, subject breakdowns, score distribution,
+ * assessment type performance breakdown, educational level comparison,
  * and teacher assessment completion timeliness for current filters.
  */
 export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
@@ -52,7 +54,7 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
 
     const scope = await loadTeachingScope(supabase, userId);
 
-    // Fetch admissions, assessments, attendance, interventions, tenant_settings
+    // Fetch admissions, assessments, attendance, interventions, tenant_settings, classes, subjects
     const [studentsRes, scoresRes, attendanceRes, interventionsRes, settingsRes, classesRes, subjectsRes] =
       await Promise.all([
         supabase
@@ -84,6 +86,12 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
     const academicRules = parseRules(features[RULES_FEATURE_KEY]);
     const riskRules = parsePerformanceRiskRules(features[PERFORMANCE_RISK_RULES_FEATURE_KEY]);
 
+    // Build class level_code lookup map
+    const classLevelMap = new Map<string, string>();
+    (classesRes.data ?? []).forEach((c) => {
+      classLevelMap.set(c.name.toLowerCase(), c.level_code || "Primary");
+    });
+
     // Apply filters
     let filteredStudents = studentsRes.data ?? [];
     if (data.className) {
@@ -95,6 +103,12 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
       filteredStudents = filteredStudents.filter(
         (s) => s.gender.toLowerCase() === data.gender?.toLowerCase(),
       );
+    }
+    if (data.educationLevel) {
+      filteredStudents = filteredStudents.filter((s) => {
+        const level = classLevelMap.get(s.class_admitted.toLowerCase()) || "Primary";
+        return level.toLowerCase() === data.educationLevel?.toLowerCase();
+      });
     }
 
     const studentIds = new Set(filteredStudents.map((s) => s.id));
@@ -144,6 +158,7 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
       admissionNumber: s.admission_number,
       className: s.class_admitted,
       gender: s.gender || "Other",
+      educationLevel: classLevelMap.get(s.class_admitted.toLowerCase()) || "Primary",
     }));
 
     // Calculate student overall scores & risk evaluations
@@ -191,7 +206,7 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
 
     const atRiskCount = riskEvaluations.filter((r) => r.riskSeverity !== "none").length;
 
-    // Score distribution categories (Proficient, Near Proficiency, Below Proficiency)
+    // Score distribution categories (Exceeding, Proficient, Developing, Below Basic)
     const scoreDistribution = [
       { name: "Exceeding (>= 80%)", count: studentAverages.filter((s) => s >= 80).length, color: "#10b981" },
       { name: "Proficient (60-79%)", count: studentAverages.filter((s) => s >= 60 && s < 80).length, color: "#3b82f6" },
@@ -242,7 +257,29 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
       };
     });
 
-    // Assessment completion & submission timeliness (dummy/calculated from score dates)
+    // Assessment type performance comparison (Exam vs Quiz vs Homework vs Assignment vs Classwork)
+    const assessmentTypeBreakdown = calculateAssessmentTypeBreakdown(filteredScores);
+
+    // Educational level comparison (Primary vs JHS vs SHS)
+    const levelSet = new Set(rawStudents.map((s) => s.educationLevel || "Primary"));
+    const educationLevelPerformance = [...levelSet].map((lvl) => {
+      const levelStudents = rawStudents.filter((s) => s.educationLevel === lvl);
+      const levelStudentIds = new Set(levelStudents.map((s) => s.id));
+      const avgs: number[] = [];
+      for (const st of levelStudents) {
+        const stScores = filteredScores.filter((s) => s.admissionId === st.id);
+        const avg = calculateStudentOverallAverage(stScores, allSubjects, academicRules);
+        if (avg !== null) avgs.push(avg);
+      }
+      return {
+        educationLevel: lvl,
+        studentCount: levelStudents.length,
+        avgScore:
+          avgs.length > 0 ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 10) / 10 : null,
+      };
+    });
+
+    // Assessment completion & submission timeliness
     const totalRecordedTasks = filteredScores.length;
     const teacherAssessmentTimeliness = {
       completedAssessments: totalRecordedTasks,
@@ -262,6 +299,8 @@ export const getPerformanceTrackerOverview = createServerFn({ method: "GET" })
       scoreDistribution,
       subjectMastery,
       classPerformance,
+      assessmentTypeBreakdown,
+      educationLevelPerformance,
       teacherAssessmentTimeliness,
       userRole: scope.role,
       isAdmin: scope.isAdmin,
@@ -462,7 +501,7 @@ export const getCrossAnalyticsData = createServerFn({ method: "GET" })
 
 /**
  * Returns list of students evaluated for risk with severity badges, explanations,
- * data sufficiency disclosures, and active interventions.
+ * data sufficiency disclosures, active interventions, and intervention effectiveness dashboard metrics.
  */
 export const getAtRiskStudentsData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -474,7 +513,7 @@ export const getAtRiskStudentsData = createServerFn({ method: "GET" })
       supabase.from("admissions").select("id, student_name, admission_number, class_admitted, gender"),
       supabase.from("student_assessments").select("admission_id, class_name, term, subject, assessment_type, score, out_of"),
       supabase.from("student_attendance").select("admission_id, attendance_date, status"),
-      supabase.from("interventions").select("id, admission_id, status, strategy, review_date, identified_need"),
+      supabase.from("interventions").select("id, admission_id, status, strategy, review_date, identified_need, target_outcome, baseline_performance, baseline_attendance"),
       supabase.from("tenant_settings").select("features").limit(1).maybeSingle(),
     ]);
 
@@ -503,7 +542,8 @@ export const getAtRiskStudentsData = createServerFn({ method: "GET" })
     const subjects = [...new Set(scores.map((s) => s.subject))].sort();
 
     const interventionMap = new Map<string, any[]>();
-    for (const inv of interventionsRes.data ?? []) {
+    const allInterventions = interventionsRes.data ?? [];
+    for (const inv of allInterventions) {
       if (!interventionMap.has(inv.admission_id)) interventionMap.set(inv.admission_id, []);
       interventionMap.get(inv.admission_id)!.push(inv);
     }
@@ -532,9 +572,40 @@ export const getAtRiskStudentsData = createServerFn({ method: "GET" })
       })
       .filter((st) => st.riskSeverity !== "none");
 
+    // Intervention Effectiveness Dashboard Summary
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const activeInterventionsCount = allInterventions.filter((i) => i.status !== "closed").length;
+    const overdueReviewsCount = allInterventions.filter(
+      (i) => i.status !== "closed" && i.review_date && i.review_date < todayStr,
+    ).length;
+
+    const atRiskStudentIdsWithIntervention = new Set(
+      allInterventions.filter((i) => i.status !== "closed").map((i) => i.admission_id),
+    );
+    const unassignedRiskCount = atRiskStudents.filter(
+      (s) => !atRiskStudentIdsWithIntervention.has(s.admissionId),
+    ).length;
+
+    // Class risk distribution breakdown
+    const classRiskMap = new Map<string, number>();
+    for (const r of atRiskStudents) {
+      classRiskMap.set(r.className, (classRiskMap.get(r.className) || 0) + 1);
+    }
+    const classRiskDistribution = [...classRiskMap.entries()].map(([className, count]) => ({
+      className,
+      count,
+    }));
+
     return {
       atRiskStudents,
       riskRules,
+      interventionMetrics: {
+        activeInterventionsCount,
+        overdueReviewsCount,
+        unassignedRiskCount,
+        totalAtRisk: atRiskStudents.length,
+        classRiskDistribution,
+      },
     };
   });
 
@@ -602,6 +673,7 @@ export const getStudentAcademicProfile = createServerFn({ method: "GET" })
       };
     });
 
+    const assessmentTypeBreakdown = calculateAssessmentTypeBreakdown(scores);
     const overallAverage = calculateStudentOverallAverage(scores, subjects, academicRules);
     const attendanceStats = calculateAttendanceRate(attendanceRes.data as any ?? []);
 
@@ -616,6 +688,7 @@ export const getStudentAcademicProfile = createServerFn({ method: "GET" })
       overallAverage,
       attendanceStats,
       subjectBreakdown,
+      assessmentTypeBreakdown,
       interventions: interventionsRes.data ?? [],
     };
   });

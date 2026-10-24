@@ -21,6 +21,8 @@ import {
   RefreshCw,
   Settings,
   FileText,
+  Building2,
+  HelpCircle,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -84,9 +86,11 @@ export function PerformanceTrackerManagement() {
   const [filters, setFilters] = useState<TrackerFilter>({
     academicYear: "2024/2025",
     term: "Term 1",
+    educationLevel: "",
     className: "",
     subject: "",
     gender: "",
+    assessmentType: "",
   });
 
   const [loading, setLoading] = useState(true);
@@ -103,7 +107,6 @@ export function PerformanceTrackerManagement() {
   const [createInterventionOpen, setCreateInterventionOpen] = useState(false);
   const [targetStudentRisk, setTargetStudentRisk] = useState<any>(null);
   const [riskRulesOpen, setRiskRulesOpen] = useState(false);
-  const [selectedIntervention, setSelectedIntervention] = useState<any>(null);
   const [noteContent, setNoteContent] = useState("");
 
   // Create Intervention Form
@@ -236,15 +239,31 @@ export function PerformanceTrackerManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header Controls & Filters */}
+      {/* Top Header Controls & Comprehensive Filters */}
       <div className="surface p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Academic Year */}
+          <Select
+            value={filters.academicYear || "2024/2025"}
+            onValueChange={(v) => setFilters((f) => ({ ...f, academicYear: v }))}
+          >
+            <SelectTrigger className="w-32">
+              <Calendar className="mr-1.5 size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="2024/2025">2024/2025</SelectItem>
+              <SelectItem value="2023/2024">2023/2024</SelectItem>
+              <SelectItem value="2022/2023">2022/2023</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Term */}
           <Select
             value={filters.term || "Term 1"}
             onValueChange={(v) => setFilters((f) => ({ ...f, term: v }))}
           >
-            <SelectTrigger className="w-36">
-              <Calendar className="mr-2 size-4 text-muted-foreground" />
+            <SelectTrigger className="w-28">
               <SelectValue placeholder="Term" />
             </SelectTrigger>
             <SelectContent>
@@ -254,14 +273,34 @@ export function PerformanceTrackerManagement() {
             </SelectContent>
           </Select>
 
+          {/* Education Level */}
+          <Select
+            value={filters.educationLevel || "all_levels"}
+            onValueChange={(v) =>
+              setFilters((f) => ({ ...f, educationLevel: v === "all_levels" ? "" : v }))
+            }
+          >
+            <SelectTrigger className="w-32">
+              <Building2 className="mr-1.5 size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="All Levels" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all_levels">All Levels</SelectItem>
+              <SelectItem value="Primary">Primary</SelectItem>
+              <SelectItem value="JHS">JHS</SelectItem>
+              <SelectItem value="SHS">SHS</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Class */}
           <Select
             value={filters.className || "all_classes"}
             onValueChange={(v) =>
               setFilters((f) => ({ ...f, className: v === "all_classes" ? "" : v }))
             }
           >
-            <SelectTrigger className="w-40">
-              <Layers className="mr-2 size-4 text-muted-foreground" />
+            <SelectTrigger className="w-36">
+              <Layers className="mr-1.5 size-3.5 text-muted-foreground" />
               <SelectValue placeholder="All Classes" />
             </SelectTrigger>
             <SelectContent>
@@ -274,14 +313,15 @@ export function PerformanceTrackerManagement() {
             </SelectContent>
           </Select>
 
+          {/* Gender */}
           <Select
             value={filters.gender || "all_genders"}
             onValueChange={(v) =>
               setFilters((f) => ({ ...f, gender: v === "all_genders" ? "" : v }))
             }
           >
-            <SelectTrigger className="w-36">
-              <User className="mr-2 size-4 text-muted-foreground" />
+            <SelectTrigger className="w-28">
+              <User className="mr-1.5 size-3.5 text-muted-foreground" />
               <SelectValue placeholder="Gender" />
             </SelectTrigger>
             <SelectContent>
@@ -291,16 +331,37 @@ export function PerformanceTrackerManagement() {
             </SelectContent>
           </Select>
 
+          {/* Subject */}
+          <Select
+            value={filters.subject || "all_subjects"}
+            onValueChange={(v) =>
+              setFilters((f) => ({ ...f, subject: v === "all_subjects" ? "" : v }))
+            }
+          >
+            <SelectTrigger className="w-36">
+              <BookOpen className="mr-1.5 size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="All Subjects" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all_subjects">All Subjects</SelectItem>
+              <SelectItem value="Mathematics">Mathematics</SelectItem>
+              <SelectItem value="English Language">English Language</SelectItem>
+              <SelectItem value="Integrated Science">Integrated Science</SelectItem>
+              <SelectItem value="Social Studies">Social Studies</SelectItem>
+              <SelectItem value="ICT">ICT</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Button variant="outline" size="sm" onClick={() => loadData()}>
-            <RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
 
         {overviewData?.isAdmin && (
           <Button variant="outline" size="sm" onClick={() => setRiskRulesOpen(true)}>
-            <Settings className="mr-2 size-4" />
-            Configure Risk Rules
+            <Settings className="mr-1.5 size-3.5" />
+            Configure Risk Thresholds
           </Button>
         )}
       </div>
@@ -400,7 +461,7 @@ export function PerformanceTrackerManagement() {
             </div>
           </div>
 
-          {/* Charts Row 1: Subject Mastery & Score Distribution */}
+          {/* Charts Row 1: Subject Mastery & Performance Tier Distribution */}
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="surface p-6 rounded-xl border border-border lg:col-span-2">
               <h3 className="text-base font-semibold mb-4">Subject Mastery & Pass Rates</h3>
@@ -450,6 +511,51 @@ export function PerformanceTrackerManagement() {
                   </ResponsiveContainer>
                 ) : (
                   <div className="text-sm text-muted-foreground">No distribution data</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row 2: Assessment Type Breakdown & Educational Level Performance */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="surface p-6 rounded-xl border border-border">
+              <h3 className="text-base font-semibold mb-4">Assessment Type Performance Comparison</h3>
+              <div className="h-64 w-full">
+                {overviewData?.assessmentTypeBreakdown && overviewData.assessmentTypeBreakdown.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={overviewData.assessmentTypeBreakdown}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="assessmentType" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Bar dataKey="avgScorePercent" name="Average Score (%)" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                    No assessment type breakdown data.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="surface p-6 rounded-xl border border-border">
+              <h3 className="text-base font-semibold mb-4">Educational Level Performance Comparison</h3>
+              <div className="h-64 w-full">
+                {overviewData?.educationLevelPerformance && overviewData.educationLevelPerformance.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={overviewData.educationLevelPerformance}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="educationLevel" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Bar dataKey="avgScore" name="Level Average Score (%)" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                    No educational level comparison data.
+                  </div>
                 )}
               </div>
             </div>
@@ -709,6 +815,61 @@ export function PerformanceTrackerManagement() {
 
         {/* TAB 4: AT-RISK & INTERVENTIONS */}
         <TabsContent value="at-risk" className="mt-6 space-y-6">
+          {/* Intervention Effectiveness Dashboard Summary */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="surface p-4 rounded-xl border border-border flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Active Interventions</p>
+                <h3 className="text-2xl font-bold mt-1 text-primary">
+                  {atRiskData?.interventionMetrics?.activeInterventionsCount ?? 0}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Under active management</p>
+              </div>
+              <span className="p-3 bg-primary/10 text-primary rounded-xl">
+                <BookOpen className="size-6" />
+              </span>
+            </div>
+
+            <div className="surface p-4 rounded-xl border border-border flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Overdue Reviews</p>
+                <h3 className="text-2xl font-bold mt-1 text-amber-600">
+                  {atRiskData?.interventionMetrics?.overdueReviewsCount ?? 0}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Action required</p>
+              </div>
+              <span className="p-3 bg-amber-500/10 text-amber-600 rounded-xl">
+                <Clock className="size-6" />
+              </span>
+            </div>
+
+            <div className="surface p-4 rounded-xl border border-border flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Unassigned Risk Cases</p>
+                <h3 className="text-2xl font-bold mt-1 text-rose-600">
+                  {atRiskData?.interventionMetrics?.unassignedRiskCount ?? 0}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Pending plan creation</p>
+              </div>
+              <span className="p-3 bg-rose-500/10 text-rose-600 rounded-xl">
+                <AlertTriangle className="size-6" />
+              </span>
+            </div>
+
+            <div className="surface p-4 rounded-xl border border-border flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Total At-Risk Students</p>
+                <h3 className="text-2xl font-bold mt-1">
+                  {atRiskData?.interventionMetrics?.totalAtRisk ?? 0}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Across all classes</p>
+              </div>
+              <span className="p-3 bg-muted text-muted-foreground rounded-xl">
+                <Users className="size-6" />
+              </span>
+            </div>
+          </div>
+
           {/* Risk Rules Thresholds Overview */}
           <div className="surface p-4 rounded-xl border border-border flex flex-wrap items-center justify-between gap-4 bg-muted/20">
             <div className="flex items-center gap-3">
@@ -818,7 +979,7 @@ export function PerformanceTrackerManagement() {
               <div>
                 <h3 className="text-base font-semibold">Individual Student Academic Performance Profile</h3>
                 <p className="text-xs text-muted-foreground">
-                  Detailed transcript, subject breakdown, risk indicators, and intervention history.
+                  Detailed transcript, subject breakdown, assessment-type scores, and intervention history.
                 </p>
               </div>
 
@@ -898,6 +1059,24 @@ export function PerformanceTrackerManagement() {
                     </table>
                   </div>
                 </div>
+
+                {/* Assessment Type Breakdown Cards */}
+                {studentProfile.assessmentTypeBreakdown && studentProfile.assessmentTypeBreakdown.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-3">Performance by Assessment Type</h4>
+                    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                      {studentProfile.assessmentTypeBreakdown.map((at: any, idx: number) => (
+                        <div key={idx} className="p-3 rounded-lg border bg-card">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">{at.assessmentType}</p>
+                          <p className="text-xl font-bold mt-1">
+                            {at.avgScorePercent !== null ? `${at.avgScorePercent}%` : "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{at.assessedCount} assessed tasks</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Intervention History */}
                 <div>
