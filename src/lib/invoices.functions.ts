@@ -138,8 +138,14 @@ export const recordInvoicePayment = createServerFn({ method: "POST" })
     if (blockReason) throw new Error(blockReason);
 
     const existingPaid = Number(fee.amount_paid ?? 0);
-    const newTotalPaid = existingPaid + data.amountPaid;
     const amountDue = Number(fee.amount_due ?? 0);
+    const balance = Math.max(0, amountDue - existingPaid);
+
+    if (data.amountPaid > balance + 0.0001) {
+      throw new Error(`Payment amount exceeds remaining balance of ${balance}.`);
+    }
+
+    const newTotalPaid = existingPaid + data.amountPaid;
     const nextStatus = calculatePaymentStatus(newTotalPaid, amountDue, fee.due_date, data.entryDate);
 
     const { error: updateErr } = await supabase
@@ -206,6 +212,20 @@ export const issueInvoice = createServerFn({ method: "POST" })
     const defaultDueDate = data.dueDate || (await calendarPeriodEnd(supabase, data.term)) || null;
 
     const totalAmount = data.lineItems.reduce((sum, item) => sum + item.amount, 0);
+    if (totalAmount <= 0) {
+      throw new Error("Invoice total amount must be greater than zero.");
+    }
+
+    // Verify student exists in admissions
+    const { data: student, error: studentErr } = await supabase
+      .from("admissions")
+      .select("id")
+      .eq("id", data.admissionId)
+      .single();
+
+    if (studentErr || !student) {
+      throw new Error("Target student admission record not found.");
+    }
 
     const { data: newFee, error: insErr } = await supabase
       .from("student_fees")
