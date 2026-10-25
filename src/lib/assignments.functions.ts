@@ -9,6 +9,8 @@ import {
   assignmentIdSchema,
   assignmentInputSchema,
   gradingInputSchema,
+  regradeRequestInputSchema,
+  reviewRegradeInputSchema,
   submissionInputSchema,
 } from "@/lib/assignments.schemas";
 
@@ -133,7 +135,7 @@ export const getAssignmentDetails = createServerFn({ method: "GET" })
 
     const { data: submissions } = await context.supabase
       .from("assignment_submissions")
-      .select("*, admissions(student_name, admission_number), assignment_groups(group_name)")
+      .select("*, admissions(student_name, admission_number), assignment_groups(group_name), assignment_regrade_requests(*)")
       .eq("assignment_id", data.id)
       .order("submitted_at", { ascending: false });
 
@@ -192,6 +194,7 @@ export const getAssignmentDetails = createServerFn({ method: "GET" })
         finalScore: s.final_score !== null ? Number(s.final_score) : null,
         feedback: s.feedback,
         gradedAt: s.graded_at,
+        regradeRequests: (s as { assignment_regrade_requests?: any[] }).assignment_regrade_requests ?? [],
       })),
     };
   });
@@ -470,4 +473,171 @@ export const gradeSubmission = createServerFn({ method: "POST" })
     }
 
     return { graded: true, finalScore, penaltyApplied: penaltyCalc.penaltyApplied };
+  });
+
+/** Student submits a regrade request for a graded submission. */
+export const requestRegrade = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => regradeRequestInputSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: submission, error: sErr } = await context.supabase
+      .from("assignment_submissions")
+      .select("id, graded_at, submitted_by, admission_id, group_id")
+      .eq("id", data.submissionId)
+      .single();
+
+    if (sErr || !submission) throw new Error("Submission not found.");
+    if (!submission.graded_at) throw new Error("Cannot request a regrade on an ungraded submission.");
+
+    // Enforce ownership: verify user submitted work or belongs to the group / admission
+    const isOwner = submission.submitted_by === context.userId;
+    let isMember = false;
+
+    if (!isOwner && submission.group_id) {
+      const { data: groupMember } = await context.supabase
+        .from("assignment_group_members")
+        .select("id, admissions(id)")
+        .eq("group_id", submission.group_id);
+
+      if (groupMember && groupMember.length > 0) {
+        const { data: profile } = await context.supabase
+          .from("profiles")
+          .select("email, phone")
+          .eq("id", context.userId)
+          .maybeSingle();
+
+        if (profile) {
+          const { data: studentRecord } = await context.supabase
+            .from("admissions")
+            .select("id")
+            .or(`parent_phone.eq.${profile.phone || "___"},student_name.ilike.%${profile.email || "___"}%`)
+            .maybeSingle();
+
+          if (studentRecord) {
+            isMember = groupMember.some((m: any) => m.admissions?.id === studentRecord.id);
+          }
+        }
+      }
+    }
+
+    if (!isOwner && !isMember) {
+      throw new Error("Unauthorized: You can only request a regrade on your own assignment submission.");
+    }
+
+    const { data: inserted, error } = await context.supabase
+      .from("assignment_regrade_requests")
+      .insert({
+        submission_id: data.submissionId,
+        student_id: context.userId,
+        reason: data.reason,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("You have already submitted a regrade request for this submission.");
+      }
+      throw new Error(error.message);
+    }
+
+    return { id: inserted.id, requested: true };
+  });
+
+/** Teacher or Admin reviews, approves/rejects a regrade request, and optionally updates score. */
+export const reviewRegradeRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => reviewRegradeInputSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: request, error: rErr } = await context.supabase
+      .from("assignment_regrade_requests")
+      .select("*, assignment_submissions(*, assignments(*))")
+      .eq("id", data.regradeRequestId)
+      .single();
+
+    if (rErr || !request || !request.assignment_submissions || !request.assignment_submissions.assignments) {
+      throw new Error("Regrade request not found.");
+    }
+
+    const submission = request.assignment_submissions;
+    const assignment = submission.assignments;
+    const scope = await loadTeachingScope(context.supabase, context.userId);
+    assertTeaches(scope, assignment.class_name, assignment.subject);
+    await assertPeriodOpen(context.supabase, { period: assignment.term });
+
+    const now = new Date().toISOString();
+
+    const { error: uReqErr } = await context.supabase
+      .from("assignment_regrade_requests")
+      .update({
+        status: data.status,
+        teacher_response: data.teacherResponse,
+        reviewed_by: context.userId,
+        reviewed_at: now,
+      })
+      .eq("id", data.regradeRequestId);
+
+    if (uReqErr) throw new Error(uReqErr.message);
+
+    let updatedFinalScore: number | null = null;
+
+    if (data.status === "approved" && data.newRawScore !== undefined && data.newRawScore !== null) {
+      const penaltyCalc = calculateLatePenalty({
+        dueDate: assignment.due_date,
+        submittedAt: submission.submitted_at,
+        allowLate: assignment.allow_late,
+        lateGraceHours: Number(assignment.late_grace_hours),
+        latePenaltyType: assignment.late_penalty_type,
+        latePenaltyValue: Number(assignment.late_penalty_value),
+        maxLatePenaltyPercent: Number(assignment.max_late_penalty_percent),
+        cutoffDate: assignment.cutoff_date,
+        maxScore: Number(assignment.max_score),
+        rawScore: data.newRawScore,
+      });
+
+      updatedFinalScore = penaltyCalc.finalScore ?? data.newRawScore;
+
+      const { error: uSubErr } = await context.supabase
+        .from("assignment_submissions")
+        .update({
+          raw_score: data.newRawScore,
+          late_penalty_applied: penaltyCalc.penaltyApplied,
+          final_score: updatedFinalScore,
+          feedback: data.teacherResponse ? `${submission.feedback}\n[Regrade Note]: ${data.teacherResponse}` : submission.feedback,
+          graded_at: now,
+          graded_by: context.userId,
+        })
+        .eq("id", submission.id);
+
+      if (uSubErr) throw new Error(uSubErr.message);
+
+      if (data.syncToAssessment && updatedFinalScore !== null) {
+        let admissionIds: string[] = [];
+        if (submission.admission_id) {
+          admissionIds = [submission.admission_id];
+        } else if (submission.group_id) {
+          const { data: members } = await context.supabase
+            .from("assignment_group_members")
+            .select("admission_id")
+            .eq("group_id", submission.group_id);
+          admissionIds = (members ?? []).map((m) => m.admission_id);
+        }
+
+        for (const admissionId of admissionIds) {
+          await context.supabase.from("student_assessments").insert({
+            admission_id: admissionId,
+            class_name: assignment.class_name,
+            term: assignment.term,
+            subject: assignment.subject,
+            assessment_type: assignment.assessment_type,
+            score: updatedFinalScore,
+            out_of: Number(assignment.max_score),
+            remark: `${assignment.title} (Regrade Approved)${data.teacherResponse ? `: ${data.teacherResponse}` : ""}`,
+          });
+        }
+      }
+    }
+
+    return { reviewed: true, status: data.status, updatedFinalScore };
   });

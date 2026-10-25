@@ -61,3 +61,20 @@ export const gradingInputSchema = z.object({
 });
 
 export type GradingInput = z.infer<typeof gradingInputSchema>;
+
+export const regradeRequestInputSchema = z.object({
+  submissionId: z.string().uuid(),
+  reason: z.string().trim().min(5, "Reason for regrade request must be at least 5 characters"),
+});
+
+export type RegradeRequestInput = z.infer<typeof regradeRequestInputSchema>;
+
+export const reviewRegradeInputSchema = z.object({
+  regradeRequestId: z.string().uuid(),
+  status: z.enum(["approved", "rejected"]),
+  teacherResponse: z.string().trim().default(""),
+  newRawScore: z.number().min(0, "Score cannot be negative").optional().nullable(),
+  syncToAssessment: z.boolean().default(false),
+});
+
+export type ReviewRegradeInput = z.infer<typeof reviewRegradeInputSchema>;

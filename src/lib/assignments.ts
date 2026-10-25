@@ -142,3 +142,17 @@ export function formatSubmissionType(type: SubmissionType | string): string {
       return "Online Text Entry";
   }
 }
+
+export type RegradeStatus = "pending" | "approved" | "rejected";
+
+export function formatRegradeStatus(status: RegradeStatus | string): string {
+  switch (status) {
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    case "pending":
+    default:
+      return "Pending Review";
+  }
+}

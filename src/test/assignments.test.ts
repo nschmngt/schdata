@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateLatePenalty,
+  formatRegradeStatus,
   formatSubmissionMode,
   formatSubmissionType,
   getAssignmentStatus,
@@ -8,6 +9,8 @@ import {
 import {
   assignmentInputSchema,
   gradingInputSchema,
+  regradeRequestInputSchema,
+  reviewRegradeInputSchema,
 } from "@/lib/assignments.schemas";
 
 describe("Assignments Pure Business Logic & Late Penalties", () => {
@@ -164,6 +167,29 @@ describe("Assignment Schema Validation", () => {
     });
     expect(negative.success).toBe(false);
   });
+
+  it("validates regrade request and review schemas", () => {
+    const validRequest = regradeRequestInputSchema.safeParse({
+      submissionId: "11111111-1111-1111-1111-111111111111",
+      reason: "Question 3 was marked incorrect despite matching answer key.",
+    });
+    expect(validRequest.success).toBe(true);
+
+    const shortReason = regradeRequestInputSchema.safeParse({
+      submissionId: "11111111-1111-1111-1111-111111111111",
+      reason: "Help",
+    });
+    expect(shortReason.success).toBe(false);
+
+    const validReview = reviewRegradeInputSchema.safeParse({
+      regradeRequestId: "22222222-2222-2222-2222-222222222222",
+      status: "approved",
+      teacherResponse: "Reviewed and granted 5 additional points.",
+      newRawScore: 95,
+      syncToAssessment: true,
+    });
+    expect(validReview.success).toBe(true);
+  });
 });
 
 describe("Assignment Status & Formatters", () => {
@@ -187,5 +213,8 @@ describe("Assignment Status & Formatters", () => {
     expect(formatSubmissionType("text")).toBe("Online Text Entry");
     expect(formatSubmissionType("file_link")).toBe("File / URL Link");
     expect(formatSubmissionType("offline")).toBe("Offline / Physical");
+    expect(formatRegradeStatus("pending")).toBe("Pending Review");
+    expect(formatRegradeStatus("approved")).toBe("Approved");
+    expect(formatRegradeStatus("rejected")).toBe("Rejected");
   });
 });

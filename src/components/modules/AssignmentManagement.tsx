@@ -62,9 +62,12 @@ import {
   gradeSubmission,
   listAssignments,
   manageAssignmentGroups,
+  requestRegrade,
+  reviewRegradeRequest,
   saveAssignment,
   submitAssignment,
 } from "@/lib/assignments.functions";
+import { formatRegradeStatus } from "@/lib/assignments";
 
 interface StudentRow {
   id: string;
@@ -138,6 +141,8 @@ export function AssignmentManagement() {
   const createGroupAction = useServerFn(manageAssignmentGroups);
   const submitAction = useServerFn(submitAssignment);
   const gradeAction = useServerFn(gradeSubmission);
+  const requestRegradeAction = useServerFn(requestRegrade);
+  const reviewRegradeAction = useServerFn(reviewRegradeRequest);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -177,6 +182,14 @@ export function AssignmentManagement() {
   const [rawScoreInput, setRawScoreInput] = useState("");
   const [feedbackInput, setFeedbackInput] = useState("");
   const [syncToAssessment, setSyncToAssessment] = useState(false);
+
+  // Regrade Request state
+  const [requestingRegradeSubmissionId, setRequestingRegradeSubmissionId] = useState<string | null>(null);
+  const [regradeReasonInput, setRegradeReasonInput] = useState("");
+  const [reviewingRegradeReqId, setReviewingRegradeReqId] = useState<string | null>(null);
+  const [regradeReviewStatus, setRegradeReviewStatus] = useState<"approved" | "rejected">("approved");
+  const [teacherResponseInput, setTeacherResponseInput] = useState("");
+  const [newRawScoreInput, setNewRawScoreInput] = useState("");
 
   const isTeacherOrAdmin = profile?.role === "super_admin" || profile?.role === "school_manager" || profile?.role === "staff";
 
@@ -265,6 +278,56 @@ export function AssignmentManagement() {
       await refreshData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save assignment.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRequestRegrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestingRegradeSubmissionId) return;
+    setBusy(true);
+    try {
+      await requestRegradeAction({
+        data: {
+          submissionId: requestingRegradeSubmissionId,
+          reason: regradeReasonInput,
+        },
+      });
+      toast.success("Regrade request submitted successfully.");
+      setRequestingRegradeSubmissionId(null);
+      setRegradeReasonInput("");
+      if (selectedAssignmentId) await handleOpenDetails(selectedAssignmentId);
+      await refreshData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit regrade request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReviewRegrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewingRegradeReqId) return;
+    setBusy(true);
+    try {
+      const res = await reviewRegradeAction({
+        data: {
+          regradeRequestId: reviewingRegradeReqId,
+          status: regradeReviewStatus,
+          teacherResponse: teacherResponseInput,
+          newRawScore: newRawScoreInput !== "" ? Number(newRawScoreInput) : null,
+          syncToAssessment,
+        },
+      });
+      toast.success(`Regrade request ${res.status}.`);
+      setReviewingRegradeReqId(null);
+      setTeacherResponseInput("");
+      setNewRawScoreInput("");
+      if (selectedAssignmentId) await handleOpenDetails(selectedAssignmentId);
+      await refreshData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to review regrade request.");
     } finally {
       setBusy(false);
     }
@@ -891,19 +954,78 @@ export function AssignmentManagement() {
                               )}
                             </td>
                             <td className="p-2 text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setGradingSubmissionId(sub.id);
-                                  setRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
-                                  setFeedbackInput(sub.feedback || "");
-                                }}
-                              >
-                                Grade
-                              </Button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isTeacherOrAdmin ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setGradingSubmissionId(sub.id);
+                                      setRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
+                                      setFeedbackInput(sub.feedback || "");
+                                    }}
+                                  >
+                                    Grade
+                                  </Button>
+                                ) : sub.gradedAt ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setRequestingRegradeSubmissionId(sub.id);
+                                    }}
+                                  >
+                                    Request Regrade
+                                  </Button>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
+
+                          {/* REGRADE REQUEST SUB-ROW */}
+                          {sub.regradeRequests && sub.regradeRequests.length > 0 ? (
+                            <tr key={`${sub.id}-regrade`} className="bg-muted/20 border-b border-border/40">
+                              <td colSpan={6} className="p-3 pl-8 text-xs space-y-2">
+                                <span className="font-semibold text-primary">Regrade Requests ({sub.regradeRequests.length}):</span>
+                                <div className="space-y-1.5">
+                                  {sub.regradeRequests.map((rr: any) => (
+                                    <div key={rr.id} className="flex items-center justify-between rounded-md border border-border/50 bg-card p-2 text-xs">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-2">
+                                          <Badge
+                                            variant={rr.status === "approved" ? "default" : rr.status === "rejected" ? "destructive" : "outline"}
+                                            className="text-[10px]"
+                                          >
+                                            {formatRegradeStatus(rr.status)}
+                                          </Badge>
+                                          <span className="font-medium text-foreground">Reason: {rr.reason}</span>
+                                        </div>
+                                        {rr.teacher_response ? (
+                                          <p className="text-[11px] text-muted-foreground">Response: {rr.teacher_response}</p>
+                                        ) : null}
+                                      </div>
+
+                                      {isTeacherOrAdmin && rr.status === "pending" ? (
+                                        <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          className="text-xs"
+                                          onClick={() => {
+                                            setReviewingRegradeReqId(rr.id);
+                                            setRegradeReviewStatus("approved");
+                                            setNewRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
+                                            setTeacherResponseInput("");
+                                          }}
+                                        >
+                                          Review Request
+                                        </Button>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
                         );
                       })}
 
@@ -1060,6 +1182,109 @@ export function AssignmentManagement() {
               <Button type="submit" className="w-full" disabled={busy}>
                 {busy ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : <Send className="mr-2 size-4" aria-hidden />}
                 Confirm & Submit
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {/* REGRADE REQUEST SUBMISSION MODAL (STUDENT) */}
+      {requestingRegradeSubmissionId ? (
+        <Dialog open={!!requestingRegradeSubmissionId} onOpenChange={(open) => !open && setRequestingRegradeSubmissionId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request Regrade</DialogTitle>
+              <DialogDescription className="text-xs">
+                Provide a clear reason or justification for requesting a regrade on this assignment submission.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleRequestRegrade} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Reason for Regrade Request</Label>
+                <Textarea
+                  rows={4}
+                  required
+                  placeholder="Explain why you believe your grade should be reviewed..."
+                  value={regradeReasonInput}
+                  onChange={(e) => setRegradeReasonInput(e.target.value)}
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : <Send className="mr-2 size-4" aria-hidden />}
+                Submit Request
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {/* REGRADE REVIEW MODAL (TEACHER / ADMIN) */}
+      {reviewingRegradeReqId ? (
+        <Dialog open={!!reviewingRegradeReqId} onOpenChange={(open) => !open && setReviewingRegradeReqId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Review Regrade Request</DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleReviewRegrade} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Review Decision</Label>
+                <Select
+                  value={regradeReviewStatus}
+                  onValueChange={(val: "approved" | "rejected") => setRegradeReviewStatus(val)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approved">Approve & Update Grade</SelectItem>
+                    <SelectItem value="rejected">Reject Request</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {regradeReviewStatus === "approved" ? (
+                <div className="space-y-1.5">
+                  <Label>New Raw Score</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    value={newRawScoreInput}
+                    onChange={(e) => setNewRawScoreInput(e.target.value)}
+                  />
+                </div>
+              ) : null}
+
+              <div className="space-y-1.5">
+                <Label>Teacher Response / Note</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="Add feedback regarding your regrade decision..."
+                  value={teacherResponseInput}
+                  onChange={(e) => setTeacherResponseInput(e.target.value)}
+                />
+              </div>
+
+              {regradeReviewStatus === "approved" ? (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-semibold">Sync Updated Score to Assessment Records</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Automatically updates the continuous assessment profile with the regraded score.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={syncToAssessment}
+                    onCheckedChange={setSyncToAssessment}
+                  />
+                </div>
+              ) : null}
+
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : <CheckCircle2 className="mr-2 size-4" aria-hidden />}
+                Confirm Review
               </Button>
             </form>
           </DialogContent>
