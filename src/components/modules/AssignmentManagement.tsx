@@ -923,109 +923,111 @@ export function AssignmentManagement() {
                             : null;
 
                         return (
-                          <tr key={sub.id} className="border-b border-border/60">
-                            <td className="p-2 font-medium">
-                              {sub.studentName ?? sub.groupName ?? "Unknown"}
-                              {sub.admissionNumber ? ` (${sub.admissionNumber})` : ""}
-                            </td>
-                            <td className="p-2 text-xs">
-                              {new Date(sub.submittedAt).toLocaleString()}
-                            </td>
-                            <td className="p-2">
-                              {sub.isLate ? (
-                                <Badge variant="destructive" className="text-[10px]">
-                                  Late ({sub.lateHours}h)
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-[10px]">On time</Badge>
-                              )}
-                            </td>
-                            <td className="p-2 text-xs max-w-xs truncate">
-                              {sub.submissionText || sub.attachmentUrl || "Offline Submission"}
-                            </td>
-                            <td className="p-2 text-right font-semibold">
-                              {sub.finalScore !== null ? (
-                                <span>
-                                  {sub.finalScore} / {details.assignment.maxScore}
-                                  {band ? ` (${band.grade})` : ""}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground font-normal">Not graded</span>
-                              )}
-                            </td>
-                            <td className="p-2 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {isTeacherOrAdmin ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setGradingSubmissionId(sub.id);
-                                      setRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
-                                      setFeedbackInput(sub.feedback || "");
-                                    }}
-                                  >
-                                    Grade
-                                  </Button>
-                                ) : sub.gradedAt ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setRequestingRegradeSubmissionId(sub.id);
-                                    }}
-                                  >
-                                    Request Regrade
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* REGRADE REQUEST SUB-ROW */}
-                          {sub.regradeRequests && sub.regradeRequests.length > 0 ? (
-                            <tr key={`${sub.id}-regrade`} className="bg-muted/20 border-b border-border/40">
-                              <td colSpan={6} className="p-3 pl-8 text-xs space-y-2">
-                                <span className="font-semibold text-primary">Regrade Requests ({sub.regradeRequests.length}):</span>
-                                <div className="space-y-1.5">
-                                  {sub.regradeRequests.map((rr: any) => (
-                                    <div key={rr.id} className="flex items-center justify-between rounded-md border border-border/50 bg-card p-2 text-xs">
-                                      <div className="space-y-0.5">
-                                        <div className="flex items-center gap-2">
-                                          <Badge
-                                            variant={rr.status === "approved" ? "default" : rr.status === "rejected" ? "destructive" : "outline"}
-                                            className="text-[10px]"
-                                          >
-                                            {formatRegradeStatus(rr.status)}
-                                          </Badge>
-                                          <span className="font-medium text-foreground">Reason: {rr.reason}</span>
-                                        </div>
-                                        {rr.teacher_response ? (
-                                          <p className="text-[11px] text-muted-foreground">Response: {rr.teacher_response}</p>
-                                        ) : null}
-                                      </div>
-
-                                      {isTeacherOrAdmin && rr.status === "pending" ? (
-                                        <Button
-                                          size="sm"
-                                          variant="secondary"
-                                          className="text-xs"
-                                          onClick={() => {
-                                            setReviewingRegradeReqId(rr.id);
-                                            setRegradeReviewStatus("approved");
-                                            setNewRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
-                                            setTeacherResponseInput("");
-                                          }}
-                                        >
-                                          Review Request
-                                        </Button>
-                                      ) : null}
-                                    </div>
-                                  ))}
+                          <tbody key={sub.id} className="contents">
+                            <tr className="border-b border-border/60">
+                              <td className="p-2 font-medium">
+                                {sub.studentName ?? sub.groupName ?? "Unknown"}
+                                {sub.admissionNumber ? ` (${sub.admissionNumber})` : ""}
+                              </td>
+                              <td className="p-2 text-xs">
+                                {new Date(sub.submittedAt).toLocaleString()}
+                              </td>
+                              <td className="p-2">
+                                {sub.isLate ? (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    Late ({sub.lateHours}h)
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px]">On time</Badge>
+                                )}
+                              </td>
+                              <td className="p-2 text-xs max-w-xs truncate">
+                                {sub.submissionText || sub.attachmentUrl || "Offline Submission"}
+                              </td>
+                              <td className="p-2 text-right font-semibold">
+                                {sub.finalScore !== null ? (
+                                  <span>
+                                    {sub.finalScore} / {details.assignment.maxScore}
+                                    {band ? ` (${band.grade})` : ""}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground font-normal">Not graded</span>
+                                )}
+                              </td>
+                              <td className="p-2 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {isTeacherOrAdmin ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setGradingSubmissionId(sub.id);
+                                        setRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
+                                        setFeedbackInput(sub.feedback || "");
+                                      }}
+                                    >
+                                      Grade
+                                    </Button>
+                                  ) : sub.gradedAt ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setRequestingRegradeSubmissionId(sub.id);
+                                      }}
+                                    >
+                                      Request Regrade
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>
-                          ) : null}
+
+                            {/* REGRADE REQUEST SUB-ROW */}
+                            {sub.regradeRequests && sub.regradeRequests.length > 0 ? (
+                              <tr key={`${sub.id}-regrade`} className="bg-muted/20 border-b border-border/40">
+                                <td colSpan={6} className="p-3 pl-8 text-xs space-y-2">
+                                  <span className="font-semibold text-primary">Regrade Requests ({sub.regradeRequests.length}):</span>
+                                  <div className="space-y-1.5">
+                                    {sub.regradeRequests.map((rr: any) => (
+                                      <div key={rr.id} className="flex items-center justify-between rounded-md border border-border/50 bg-card p-2 text-xs">
+                                        <div className="space-y-0.5">
+                                          <div className="flex items-center gap-2">
+                                            <Badge
+                                              variant={rr.status === "approved" ? "default" : rr.status === "rejected" ? "destructive" : "outline"}
+                                              className="text-[10px]"
+                                            >
+                                              {formatRegradeStatus(rr.status)}
+                                            </Badge>
+                                            <span className="font-medium text-foreground">Reason: {rr.reason}</span>
+                                          </div>
+                                          {rr.teacher_response ? (
+                                            <p className="text-[11px] text-muted-foreground">Response: {rr.teacher_response}</p>
+                                          ) : null}
+                                        </div>
+
+                                        {isTeacherOrAdmin && rr.status === "pending" ? (
+                                          <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="text-xs"
+                                            onClick={() => {
+                                              setReviewingRegradeReqId(rr.id);
+                                              setRegradeReviewStatus("approved");
+                                              setNewRawScoreInput(sub.rawScore !== null ? String(sub.rawScore) : "");
+                                              setTeacherResponseInput("");
+                                            }}
+                                          >
+                                            Review Request
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
                         );
                       })}
 
