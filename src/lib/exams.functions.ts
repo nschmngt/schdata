@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertPeriodOpen, loadRules } from "@/lib/academic-calendar.server";
+import { assertPeriodOpen } from "@/lib/academic-calendar.server";
 import { assertTeaches, loadTeachingScope } from "@/lib/teaching.server";
 import {
   examIdSchema,
@@ -8,6 +8,8 @@ import {
   gradeSubmissionSchema,
   submitExamSchema,
   syncToAssessmentSchema,
+  isExamActiveWindow,
+  evaluateAnswerCorrectness,
 } from "@/lib/exams.schemas";
 
 /** Helper to find admission record for current student user. */
@@ -218,7 +220,7 @@ export const startExamAttempt = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: exam, error } = await context.supabase
       .from("exams_quizzes")
-      .select("status, term")
+      .select("status, term, start_time, end_time")
       .eq("id", data.id)
       .single();
 
@@ -226,6 +228,16 @@ export const startExamAttempt = createServerFn({ method: "POST" })
     if (exam.status !== "published") throw new Error("This exam is not active.");
 
     await assertPeriodOpen(context.supabase, { period: exam.term });
+
+    const timeWindow = isExamActiveWindow(exam.start_time, exam.end_time);
+    if (!timeWindow.isActive) {
+      if (timeWindow.reason === "not_started") {
+        throw new Error("This exam has not opened yet.");
+      }
+      if (timeWindow.reason === "ended") {
+        throw new Error("This exam window has closed.");
+      }
+    }
 
     // Check for existing attempt
     const { data: existing } = await context.supabase
@@ -272,30 +284,37 @@ export const submitExamAnswers = createServerFn({ method: "POST" })
     let calculatedTotalScore = 0;
     let requiresManualGrading = false;
 
-    const answerRows = data.answers.map((ans) => {
-      const q = questions.find((item) => item.id === ans.questionId);
-      if (!q) return null;
+    const answerRows = data.answers
+      .map((ans) => {
+        const q = questions.find((item) => item.id === ans.questionId);
+        if (!q) return null;
 
-      let isCorrect = false;
-      let pointsAwarded = 0;
+        const evalResult = evaluateAnswerCorrectness(
+          q.question_type,
+          q.correct_answer,
+          ans.answerText,
+        );
 
-      if (q.question_type === "multiple_choice" || q.question_type === "true_false") {
-        isCorrect =
-          ans.answerText.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase();
-        pointsAwarded = isCorrect ? Number(q.points) : 0;
-        calculatedTotalScore += pointsAwarded;
-      } else {
-        requiresManualGrading = true;
-      }
+        let isCorrect: boolean | null = null;
+        let pointsAwarded = 0;
 
-      return {
-        submission_id: data.submissionId,
-        question_id: ans.questionId,
-        answer_text: ans.answerText,
-        is_correct: q.question_type === "short_answer" || q.question_type === "essay" ? null : isCorrect,
-        points_awarded: pointsAwarded,
-      };
-    }).filter(Boolean);
+        if (evalResult.isAutoGraded) {
+          isCorrect = evalResult.isCorrect;
+          pointsAwarded = isCorrect ? Number(q.points) : 0;
+          calculatedTotalScore += pointsAwarded;
+        } else {
+          requiresManualGrading = true;
+        }
+
+        return {
+          submission_id: data.submissionId,
+          question_id: ans.questionId,
+          answer_text: ans.answerText,
+          is_correct: isCorrect,
+          points_awarded: pointsAwarded,
+        };
+      })
+      .filter(Boolean);
 
     await context.supabase.from("exam_answers").delete().eq("submission_id", data.submissionId);
     const { error: ansErr } = await context.supabase.from("exam_answers").insert(answerRows as any[]);

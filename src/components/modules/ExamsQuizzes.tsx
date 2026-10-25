@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "@/hooks/useSession";
+import { useSchoolClasses } from "@/hooks/useSchoolClasses";
+import { useSubjectOptions } from "@/hooks/useSubjectOptions";
+import { useAcademicCalendar } from "@/hooks/useAcademicCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +30,7 @@ import {
   ArrowLeft,
   Check,
   X,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -40,7 +44,11 @@ import {
   syncExamToAssessment,
   listSubmissions,
 } from "@/lib/exams.functions";
-import type { QuestionInput } from "@/lib/exams.schemas";
+import {
+  calculateExamScorePercentage,
+  isExamPassingScore,
+  type QuestionInput,
+} from "@/lib/exams.schemas";
 
 export function ExamsQuizzes() {
   const { profile } = useSession();
@@ -74,7 +82,9 @@ export function ExamsQuizzes() {
   }, []);
 
   const filteredExams = exams.filter((e) => {
-    const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase()) || e.subject.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.subject.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "all" || e.exam_type === typeFilter;
     const matchesStatus = statusFilter === "all" || e.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
@@ -207,7 +217,9 @@ export function ExamsQuizzes() {
           </div>
 
           {loading ? (
-            <div className="p-8 text-center text-muted-foreground surface rounded-xl">Loading exams & quizzes...</div>
+            <div className="p-8 text-center text-muted-foreground surface rounded-xl">
+              Loading exams & quizzes...
+            </div>
           ) : filteredExams.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground surface rounded-xl">
               No exams or quizzes found matching your criteria.
@@ -260,7 +272,12 @@ export function ExamsQuizzes() {
                         <Button size="sm" variant="ghost" onClick={() => handleOpenGrading(exam.id)}>
                           <Layers className="size-3.5" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(exam.id)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => handleDelete(exam.id)}
+                        >
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
@@ -330,19 +347,31 @@ export function ExamsQuizzes() {
   );
 }
 
-// Sub-component: Exam Builder Form
+// Sub-component: Exam Builder Form with Centralized Catalog Selectors
 function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved: () => void }) {
+  const { names: configuredClasses } = useSchoolClasses();
+  const { subjects: configuredSubjects } = useSubjectOptions();
+  const { periods } = useAcademicCalendar();
+
   const [title, setTitle] = useState(initialData?.title || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [examType, setExamType] = useState<"exam" | "quiz">(initialData?.exam_type || "exam");
   const [className, setClassName] = useState(initialData?.class_name || "");
   const [subject, setSubject] = useState(initialData?.subject || "");
-  const [term, setTerm] = useState(initialData?.term || "First Term");
+  const [term, setTerm] = useState(initialData?.term || "");
   const [durationMinutes, setDurationMinutes] = useState(initialData?.duration_minutes || 60);
   const [totalMarks, setTotalMarks] = useState(initialData?.total_marks || 100);
   const [passMark, setPassMark] = useState(initialData?.pass_mark || 50);
-  const [status, setStatus] = useState<"draft" | "published" | "closed" | "archived">(initialData?.status || "draft");
+  const [status, setStatus] = useState<"draft" | "published" | "closed" | "archived">(
+    initialData?.status || "draft"
+  );
   const [shuffleQuestions, setShuffleQuestions] = useState(initialData?.shuffle_questions || false);
+  const [startTime, setStartTime] = useState(
+    initialData?.start_time ? new Date(initialData.start_time).toISOString().slice(0, 16) : ""
+  );
+  const [endTime, setEndTime] = useState(
+    initialData?.end_time ? new Date(initialData.end_time).toISOString().slice(0, 16) : ""
+  );
   const [questions, setQuestions] = useState<QuestionInput[]>(initialData?.questions || []);
   const [saving, setSaving] = useState(false);
 
@@ -353,15 +382,26 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
       setExamType(initialData.exam_type || "exam");
       setClassName(initialData.class_name || "");
       setSubject(initialData.subject || "");
-      setTerm(initialData.term || "First Term");
+      setTerm(initialData.term || "");
       setDurationMinutes(initialData.duration_minutes || 60);
       setTotalMarks(initialData.total_marks || 100);
       setPassMark(initialData.pass_mark || 50);
       setStatus(initialData.status || "draft");
       setShuffleQuestions(initialData.shuffle_questions || false);
+      setStartTime(
+        initialData.start_time ? new Date(initialData.start_time).toISOString().slice(0, 16) : ""
+      );
+      setEndTime(
+        initialData.end_time ? new Date(initialData.end_time).toISOString().slice(0, 16) : ""
+      );
       setQuestions(initialData.questions || []);
+    } else {
+      if (periods.length > 0 && !term) {
+        const activePeriod = periods.find((p) => p.status === "active") || periods[0];
+        setTerm(activePeriod.name);
+      }
     }
-  }, [initialData]);
+  }, [initialData, periods]);
 
   const addQuestion = () => {
     setQuestions([
@@ -394,6 +434,10 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
       toast.error("Please fill in all required exam metadata");
       return;
     }
+    if (Number(passMark) > Number(totalMarks)) {
+      toast.error("Pass mark cannot exceed total marks");
+      return;
+    }
     setSaving(true);
     try {
       await saveExam({
@@ -410,6 +454,8 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
           passMark: Number(passMark),
           shuffleQuestions,
           status,
+          startTime: startTime ? new Date(startTime).toISOString() : null,
+          endTime: endTime ? new Date(endTime).toISOString() : null,
           questions,
         },
       });
@@ -459,29 +505,104 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
             </SelectContent>
           </Select>
         </div>
+
+        {/* Centralized Class Select */}
         <div>
           <Label>Class *</Label>
-          <Input value={className} onChange={(e) => setClassName(e.target.value)} placeholder="e.g. Primary 1" required />
+          <Select value={className} onValueChange={setClassName}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Class" />
+            </SelectTrigger>
+            <SelectContent>
+              {configuredClasses.length > 0 ? (
+                configuredClasses.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value={className || "Primary 1"}>{className || "Primary 1"}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Centralized Subject Select */}
         <div>
           <Label>Subject *</Label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Mathematics" required />
+          <Select value={subject} onValueChange={setSubject}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {configuredSubjects.length > 0 ? (
+                configuredSubjects.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value={subject || "Mathematics"}>{subject || "Mathematics"}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Academic Calendar Term Select */}
         <div>
           <Label>Term / Period *</Label>
-          <Input value={term} onChange={(e) => setTerm(e.target.value)} required />
+          <Select value={term} onValueChange={setTerm}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Academic Term" />
+            </SelectTrigger>
+            <SelectContent>
+              {periods.map((p) => (
+                <SelectItem key={p.name} value={p.name}>
+                  {p.name} ({p.status})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
         <div>
           <Label>Duration (Minutes) *</Label>
-          <Input type="number" value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} required min={1} />
+          <Input
+            type="number"
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+            required
+            min={1}
+          />
         </div>
         <div>
           <Label>Total Marks *</Label>
-          <Input type="number" value={totalMarks} onChange={(e) => setTotalMarks(Number(e.target.value))} required min={0} />
+          <Input
+            type="number"
+            value={totalMarks}
+            onChange={(e) => setTotalMarks(Number(e.target.value))}
+            required
+            min={0}
+          />
         </div>
         <div>
           <Label>Pass Mark *</Label>
-          <Input type="number" value={passMark} onChange={(e) => setPassMark(Number(e.target.value))} required min={0} />
+          <Input
+            type="number"
+            value={passMark}
+            onChange={(e) => setPassMark(Number(e.target.value))}
+            required
+            min={0}
+          />
+        </div>
+
+        <div>
+          <Label>Start Time (Optional)</Label>
+          <Input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </div>
+        <div>
+          <Label>End Time (Optional)</Label>
+          <Input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
         </div>
       </div>
 
@@ -510,7 +631,13 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
           <Card key={idx} className="p-4 space-y-3 bg-muted/30">
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-sm">Question #{idx + 1}</span>
-              <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => removeQuestion(idx)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                onClick={() => removeQuestion(idx)}
+              >
                 <Trash2 className="size-4" />
               </Button>
             </div>
@@ -518,11 +645,18 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <Label>Question Text</Label>
-                <Input value={q.questionText} onChange={(e) => updateQuestion(idx, { questionText: e.target.value })} required />
+                <Input
+                  value={q.questionText}
+                  onChange={(e) => updateQuestion(idx, { questionText: e.target.value })}
+                  required
+                />
               </div>
               <div>
                 <Label>Question Type</Label>
-                <Select value={q.questionType} onValueChange={(v: any) => updateQuestion(idx, { questionType: v })}>
+                <Select
+                  value={q.questionType}
+                  onValueChange={(v: any) => updateQuestion(idx, { questionType: v })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -536,7 +670,12 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
               </div>
               <div>
                 <Label>Points</Label>
-                <Input type="number" value={q.points} onChange={(e) => updateQuestion(idx, { points: Number(e.target.value) })} min={0} />
+                <Input
+                  type="number"
+                  value={q.points}
+                  onChange={(e) => updateQuestion(idx, { points: Number(e.target.value) })}
+                  min={0}
+                />
               </div>
 
               {(q.questionType === "multiple_choice" || q.questionType === "true_false") && (
@@ -551,7 +690,10 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
                     }
                   />
                   <Label>Correct Answer</Label>
-                  <Input value={q.correctAnswer} onChange={(e) => updateQuestion(idx, { correctAnswer: e.target.value })} />
+                  <Input
+                    value={q.correctAnswer}
+                    onChange={(e) => updateQuestion(idx, { correctAnswer: e.target.value })}
+                  />
                 </div>
               )}
             </div>
@@ -568,7 +710,7 @@ function ExamBuilderForm({ initialData, onSaved }: { initialData?: any; onSaved:
   );
 }
 
-// Sub-component: Live Exam Session
+// Sub-component: Live Exam Session with Confirmation Modal and Immediate Feedback
 function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => void }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const answersRef = useRef(answers);
@@ -576,25 +718,33 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
 
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(exam.duration_minutes * 60);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<any | null>(null);
 
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
+    setShowConfirmModal(false);
     try {
       const formattedAnswers = Object.entries(answersRef.current).map(([questionId, answerText]) => ({
         questionId,
         answerText,
       }));
 
-      await submitExamAnswers({
+      const res = await submitExamAnswers({
         data: {
           examId: exam.id,
           submissionId: exam.submissionId,
           answers: formattedAnswers,
         },
       });
+
       toast.success("Exam submitted successfully");
-      onSubmitted();
+      if (exam.show_results_immediately && res.status === "graded") {
+        setSubmissionResult(res);
+      } else {
+        onSubmitted();
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to submit exam");
     } finally {
@@ -603,6 +753,7 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
   };
 
   useEffect(() => {
+    if (submissionResult) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -614,7 +765,7 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [submissionResult]);
 
   const handleSelectOption = (questionId: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -626,12 +777,50 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
+  if (submissionResult) {
+    const pct = calculateExamScorePercentage(submissionResult.score, exam.total_marks);
+    const passed = isExamPassingScore(submissionResult.score, exam.pass_mark);
+
+    return (
+      <div className="space-y-6 surface p-6 rounded-xl border border-border text-center max-w-lg mx-auto">
+        <div className="flex justify-center mb-2">
+          {passed ? (
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-full">
+              <CheckCircle className="size-12" />
+            </div>
+          ) : (
+            <div className="p-3 bg-destructive/10 text-destructive rounded-full">
+              <AlertCircle className="size-12" />
+            </div>
+          )}
+        </div>
+
+        <h3 className="text-xl font-bold">Exam Submitted!</h3>
+        <p className="text-sm text-muted-foreground">{exam.title}</p>
+
+        <div className="p-4 rounded-lg bg-muted/30 border border-border space-y-2 my-4">
+          <p className="text-3xl font-extrabold">{submissionResult.score} / {exam.total_marks}</p>
+          <p className="text-sm font-semibold">{pct}%</p>
+          <Badge variant={passed ? "default" : "destructive"}>
+            {passed ? "PASSED" : "FAILED"}
+          </Badge>
+        </div>
+
+        <Button onClick={onSubmitted} className="w-full">
+          Return to Directory
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 surface p-6 rounded-xl border border-border">
       <div className="flex items-center justify-between border-b pb-4 border-border">
         <div>
           <h3 className="text-xl font-bold">{exam.title}</h3>
-          <p className="text-xs text-muted-foreground">{exam.subject} · {exam.class_name}</p>
+          <p className="text-xs text-muted-foreground">
+            {exam.subject} · {exam.class_name}
+          </p>
         </div>
         <div className="flex items-center gap-2 bg-primary/10 text-primary font-mono px-3 py-1.5 rounded-lg text-sm font-bold">
           <Clock className="size-4" /> {formatTime(timeLeft)}
@@ -642,13 +831,17 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
         {exam.questions.map((q: any, idx: number) => (
           <Card key={q.id} className="p-4 space-y-3">
             <p className="font-semibold text-sm">
-              Q{idx + 1}. {q.questionText} <span className="text-xs font-normal text-muted-foreground">({q.points} pts)</span>
+              Q{idx + 1}. {q.questionText}{" "}
+              <span className="text-xs font-normal text-muted-foreground">({q.points} pts)</span>
             </p>
 
             {q.questionType === "multiple_choice" || q.questionType === "true_false" ? (
               <div className="grid gap-2">
                 {(q.options || []).map((opt: string, oIdx: number) => (
-                  <label key={oIdx} className="flex items-center gap-2 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer text-sm">
+                  <label
+                    key={oIdx}
+                    className="flex items-center gap-2 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer text-sm"
+                  >
                     <input
                       type="radio"
                       name={q.id}
@@ -673,10 +866,30 @@ function LiveExamSession({ exam, onSubmitted }: { exam: any; onSubmitted: () => 
       </div>
 
       <div className="flex justify-end border-t pt-4 border-border">
-        <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-          <Send className="size-4" /> {submitting ? "Submitting..." : "Submit Examination"}
+        <Button onClick={() => setShowConfirmModal(true)} disabled={submitting} className="gap-2">
+          <Send className="size-4" /> Submit Examination
         </Button>
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Submission</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to finalize and submit your answers? You cannot alter your responses after submission.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+              Continue Working
+            </Button>
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "Submitting..." : "Confirm & Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -686,7 +899,9 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [gradingSubmission, setGradingSubmission] = useState<any | null>(null);
-  const [gradedAnswers, setGradedAnswers] = useState<Record<string, { pointsAwarded: number; isCorrect: boolean; feedback: string }>>({});
+  const [gradedAnswers, setGradedAnswers] = useState<
+    Record<string, { pointsAwarded: number; isCorrect: boolean; feedback: string }>
+  >({});
   const [overallFeedback, setOverallFeedback] = useState("");
   const [savingGrade, setSavingGrade] = useState(false);
 
@@ -709,7 +924,10 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
   const openGradingModal = (sub: any) => {
     setGradingSubmission(sub);
     setOverallFeedback(sub.feedback || "");
-    const initialGraded: Record<string, { pointsAwarded: number; isCorrect: boolean; feedback: string }> = {};
+    const initialGraded: Record<
+      string,
+      { pointsAwarded: number; isCorrect: boolean; feedback: string }
+    > = {};
     (sub.exam_answers || []).forEach((ans: any) => {
       initialGraded[ans.id] = {
         pointsAwarded: Number(ans.points_awarded ?? 0),
@@ -760,7 +978,9 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
 
   return (
     <div className="space-y-4 surface p-6 rounded-xl border border-border">
-      <h3 className="text-lg font-bold border-b pb-3 border-border">Submissions & Manual Grading Hub</h3>
+      <h3 className="text-lg font-bold border-b pb-3 border-border">
+        Submissions & Manual Grading Hub
+      </h3>
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Loading student submissions...</p>
@@ -769,11 +989,17 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
       ) : (
         <div className="space-y-3">
           {submissions.map((sub) => (
-            <div key={sub.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border border-border bg-muted/20 gap-3">
+            <div
+              key={sub.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border border-border bg-muted/20 gap-3"
+            >
               <div>
-                <p className="font-semibold text-sm">{sub.admissions?.student_name || sub.profiles?.full_name || "Student Attempt"}</p>
+                <p className="font-semibold text-sm">
+                  {sub.admissions?.student_name || sub.profiles?.full_name || "Student Attempt"}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Status: <Badge variant={sub.status === "graded" ? "default" : "secondary"}>{sub.status}</Badge> · Total Score: <span className="font-bold">{sub.total_score} pts</span>
+                  Status: <Badge variant={sub.status === "graded" ? "default" : "secondary"}>{sub.status}</Badge> ·
+                  Total Score: <span className="font-bold">{sub.total_score} pts</span>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -795,14 +1021,21 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                Grade Submission: {gradingSubmission.admissions?.student_name || gradingSubmission.profiles?.full_name || "Student"}
+                Grade Submission:{" "}
+                {gradingSubmission.admissions?.student_name ||
+                  gradingSubmission.profiles?.full_name ||
+                  "Student"}
               </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-6 py-2">
               {(gradingSubmission.exam_answers || []).map((ans: any, idx: number) => {
                 const question = ans.exam_questions;
-                const currentGrade = gradedAnswers[ans.id] || { pointsAwarded: 0, isCorrect: false, feedback: "" };
+                const currentGrade = gradedAnswers[ans.id] || {
+                  pointsAwarded: 0,
+                  isCorrect: false,
+                  feedback: "",
+                };
 
                 return (
                   <Card key={ans.id} className="p-4 space-y-3 bg-muted/20">
@@ -814,7 +1047,9 @@ function GradingHub({ examId, onDone }: { examId: string; onDone: () => void }) 
                     </div>
 
                     <div className="rounded-lg bg-background p-3 border border-border text-sm">
-                      <p className="text-xs text-muted-foreground font-semibold mb-1">Student's Answer:</p>
+                      <p className="text-xs text-muted-foreground font-semibold mb-1">
+                        Student's Answer:
+                      </p>
                       <p className="font-mono text-sm">{ans.answer_text || "(No answer provided)"}</p>
                     </div>
 
@@ -902,10 +1137,11 @@ function ExamAnalyticsView({ exams }: { exams: any[] }) {
   const totalExams = exams.length;
   const totalQuizzes = exams.filter((e) => e.exam_type === "quiz").length;
   const activeExams = exams.filter((e) => e.status === "published").length;
+  const closedExams = exams.filter((e) => e.status === "closed").length;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Total Assessments</p>
           <p className="text-2xl font-bold">{totalExams}</p>
@@ -917,6 +1153,10 @@ function ExamAnalyticsView({ exams }: { exams: any[] }) {
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Published Live</p>
           <p className="text-2xl font-bold">{activeExams}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Closed / Completed</p>
+          <p className="text-2xl font-bold">{closedExams}</p>
         </Card>
       </div>
     </div>
