@@ -118,13 +118,36 @@ describe("Invoices Module - Pure Domain Logic & Formatting", () => {
         lineItems: [],
         createdAt: "2025-01-01",
       },
+      {
+        id: "inv-3",
+        invoiceNumber: "INV-0001-25-00003",
+        admissionId: "adm-3",
+        studentName: "Student C",
+        admissionNumber: "ADM-003",
+        className: "Primary 3",
+        levelCode: "PRIMARY",
+        term: "Term 1",
+        issueDate: "2025-01-01",
+        dueDate: "2025-02-01",
+        amountDue: 800,
+        amountPaid: 0,
+        balance: 800,
+        status: "void",
+        lineItems: [],
+        createdAt: "2025-01-01",
+      },
     ];
 
     const summary = calculateInvoiceSummary(sampleInvoices, "2025-01-15");
     expect(summary.totalIssued).toBe(2000);
     expect(summary.totalCollected).toBe(1500);
     expect(summary.totalOutstanding).toBe(500);
+    expect(summary.voidCount).toBe(1);
     expect(summary.collectionRate).toBe(75);
+
+    const emptySummary = calculateInvoiceSummary([]);
+    expect(emptySummary.totalIssued).toBe(0);
+    expect(emptySummary.collectionRate).toBe(100);
   });
 
   it("filters invoices multi-dimensionally", () => {
@@ -174,6 +197,14 @@ describe("Invoices Module - Pure Domain Logic & Formatting", () => {
     const levelResult = filterInvoices(sampleInvoices, { levelCode: "PRIMARY" });
     expect(levelResult.length).toBe(1);
     expect(levelResult[0].studentName).toBe("John Doe");
+
+    const classResult = filterInvoices(sampleInvoices, { className: "primary 1" });
+    expect(classResult.length).toBe(1);
+    expect(classResult[0].studentName).toBe("John Doe");
+
+    const statusResult = filterInvoices(sampleInvoices, { status: "PAID" });
+    expect(statusResult.length).toBe(1);
+    expect(statusResult[0].studentName).toBe("Jane Smith");
   });
 });
 
@@ -212,6 +243,13 @@ describe("Invoices Module - Zod Schema Validations", () => {
       lineItems: [],
     });
     expect(invalid.success).toBe(false);
+
+    const invalidLineItem = issueInvoiceSchema.safeParse({
+      admissionId: "adm-55",
+      term: "2024/2025 - Term 1",
+      lineItems: [{ description: "Bad Item", feeCategory: "tuition", amount: -10 }],
+    });
+    expect(invalidLineItem.success).toBe(false);
   });
 
   it("validates void invoice schema", () => {

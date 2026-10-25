@@ -73,6 +73,7 @@ import {
   Layers,
   ArrowUpRight,
   TrendingUp,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -183,6 +184,10 @@ export function InvoicesManagement() {
       term: termFilter,
     });
   }, [data?.invoices, search, statusFilter, classFilter, levelFilter, termFilter]);
+
+  const lineItemTotal = useMemo(() => {
+    return lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }, [lineItems]);
 
   const filteredReceipts = useMemo(() => {
     if (!data?.receipts) return [];
@@ -840,7 +845,12 @@ export function InvoicesManagement() {
 
             {/* Line items list */}
             <div className="space-y-2 border-t pt-3">
-              <Label className="text-xs font-semibold">Line Items</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Line Items</Label>
+                <span className="text-xs font-bold text-primary">
+                  Total: {formatCurrency(lineItemTotal, finConfig.currency)}
+                </span>
+              </div>
               {lineItems.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <Input
@@ -874,6 +884,8 @@ export function InvoicesManagement() {
                   </Select>
                   <Input
                     type="number"
+                    min="0"
+                    step="0.01"
                     placeholder="Amount"
                     className="w-[100px] h-8 text-xs"
                     value={item.amount || ""}
@@ -883,8 +895,35 @@ export function InvoicesManagement() {
                       setLineItems(updated);
                     }}
                   />
+                  {lineItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setLineItems(lineItems.filter((_, i) => i !== idx));
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  )}
                 </div>
               ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 mt-1 w-full"
+                onClick={() => {
+                  setLineItems([
+                    ...lineItems,
+                    { description: "", feeCategory: categories[0]?.code || "tuition", amount: 0 },
+                  ]);
+                }}
+              >
+                <PlusCircle className="size-3.5" /> Add Line Item
+              </Button>
             </div>
 
             <div className="space-y-1.5">
@@ -902,7 +941,7 @@ export function InvoicesManagement() {
               Cancel
             </Button>
             <Button
-              disabled={!issueAdmissionId || !issueTerm || issueInvMut.isPending}
+              disabled={!issueAdmissionId || !issueTerm || lineItemTotal <= 0 || issueInvMut.isPending}
               onClick={() =>
                 issueInvMut.mutate({
                   admissionId: issueAdmissionId,
