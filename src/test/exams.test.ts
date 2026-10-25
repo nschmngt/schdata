@@ -4,6 +4,10 @@ import {
   questionInputSchema,
   submitExamSchema,
   gradeSubmissionSchema,
+  calculateExamScorePercentage,
+  isExamPassingScore,
+  isExamActiveWindow,
+  evaluateAnswerCorrectness,
 } from "../lib/exams.schemas";
 
 describe("Exams & Quizzes validation schemas", () => {
@@ -42,6 +46,34 @@ describe("Exams & Quizzes validation schemas", () => {
       className: "",
       subject: "English",
       term: "First Term",
+    });
+
+    expect(invalid.success).toBe(false);
+  });
+
+  it("rejects when passMark exceeds totalMarks", () => {
+    const invalid = examInputSchema.safeParse({
+      title: "Science Quiz",
+      examType: "quiz",
+      className: "Basic 1",
+      subject: "Basic Science",
+      term: "First Term",
+      totalMarks: 50,
+      passMark: 60,
+    });
+
+    expect(invalid.success).toBe(false);
+  });
+
+  it("rejects when endTime is prior to startTime", () => {
+    const invalid = examInputSchema.safeParse({
+      title: "Science Quiz",
+      examType: "quiz",
+      className: "Basic 1",
+      subject: "Basic Science",
+      term: "First Term",
+      startTime: "2025-10-10T10:00:00.000Z",
+      endTime: "2025-10-10T09:00:00.000Z",
     });
 
     expect(invalid.success).toBe(false);
@@ -87,5 +119,46 @@ describe("Exams & Quizzes validation schemas", () => {
     });
 
     expect(validGrading.success).toBe(true);
+  });
+});
+
+describe("Exams & Quizzes Pure Business Logic & Domain Helpers", () => {
+  it("calculates accurate score percentage", () => {
+    expect(calculateExamScorePercentage(45, 60)).toBe(75);
+    expect(calculateExamScorePercentage(0, 100)).toBe(0);
+    expect(calculateExamScorePercentage(10, 0)).toBe(0);
+  });
+
+  it("evaluates passing score accurately", () => {
+    expect(isExamPassingScore(50, 50)).toBe(true);
+    expect(isExamPassingScore(49.5, 50)).toBe(false);
+  });
+
+  it("checks exam active window correctly", () => {
+    const now = new Date("2025-05-15T12:00:00Z");
+
+    const futureStart = isExamActiveWindow("2025-05-15T13:00:00Z", "2025-05-15T14:00:00Z", now);
+    expect(futureStart.isActive).toBe(false);
+    expect(futureStart.reason).toBe("not_started");
+
+    const pastEnd = isExamActiveWindow("2025-05-15T09:00:00Z", "2025-05-15T11:00:00Z", now);
+    expect(pastEnd.isActive).toBe(false);
+    expect(pastEnd.reason).toBe("ended");
+
+    const activeWindow = isExamActiveWindow("2025-05-15T10:00:00Z", "2025-05-15T14:00:00Z", now);
+    expect(activeWindow.isActive).toBe(true);
+  });
+
+  it("evaluates answer correctness for auto-graded types", () => {
+    const mcq = evaluateAnswerCorrectness("multiple_choice", "Option A", " option a ");
+    expect(mcq.isAutoGraded).toBe(true);
+    expect(mcq.isCorrect).toBe(true);
+
+    const tf = evaluateAnswerCorrectness("true_false", "True", "False");
+    expect(tf.isAutoGraded).toBe(true);
+    expect(tf.isCorrect).toBe(false);
+
+    const essay = evaluateAnswerCorrectness("essay", "Key terms", "My response");
+    expect(essay.isAutoGraded).toBe(false);
   });
 });
