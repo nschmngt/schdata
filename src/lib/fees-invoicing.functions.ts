@@ -6,6 +6,7 @@ import { assertPeriodOpen, calendarPeriodEnd } from "@/lib/academic-calendar.ser
 import { parseCalendar, currentPeriod, writeBlockReason, CALENDAR_FEATURE_KEY } from "@/lib/academic-calendar";
 import { calculatePaymentStatus } from "@/lib/finance";
 import { resolveApplicableFees, type FeeStructureItem } from "@/lib/fees-invoicing";
+import { inferEducationLevel } from "@/lib/education-levels";
 import {
   billingRunSchema,
   feeAdjustmentSchema,
@@ -137,6 +138,10 @@ export const executeBillingRun = createServerFn({ method: "POST" })
       if (!s.class_admitted) return false;
       if (data.targetScope === "class" && data.targetValue) {
         return s.class_admitted.trim().toLowerCase() === data.targetValue.trim().toLowerCase();
+      }
+      if (data.targetScope === "education_level" && data.targetValue) {
+        const lvl = inferEducationLevel(s.class_admitted);
+        return lvl.toLowerCase() === data.targetValue.trim().toLowerCase();
       }
       return true;
     });
@@ -271,16 +276,12 @@ export const recordFeePayment = createServerFn({ method: "POST" })
         amount_paid: data.amountPaid,
         method: data.paymentMethod,
         reference: data.reference,
-        new_total_paid: newTotalTotalPaid(newTotalPaid),
+        new_total_paid: newTotalPaid,
       },
     });
 
     return { ok: true, newTotalPaid, nextStatus };
   });
-
-function newTotalTotalPaid(val: number) {
-  return val;
-}
 
 /** Applies a fee discount, waiver, penalty, or amount override to a student fee record. */
 export const applyFeeAdjustment = createServerFn({ method: "POST" })

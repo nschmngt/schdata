@@ -14,7 +14,7 @@ import {
   coverageApplies,
   type AcademicCalendar,
 } from "./academic-calendar";
-import { amountForLevel, appliesToLevel } from "./education-levels";
+import { amountForLevel, appliesToLevel, inferEducationLevel } from "./education-levels";
 
 export interface StudentFeeRecord {
   id: string;
@@ -157,15 +157,6 @@ export function mapStudentFeeLedger(records: StudentFeeRecord[], todayStr = new 
   });
 }
 
-/** Infer level code from class name if not directly provided. */
-function inferLevelCode(className: string): string {
-  const norm = className.trim().toLowerCase();
-  if (norm.includes("primary") || norm.includes("basic")) return "PRIMARY";
-  if (norm.includes("jhs") || norm.includes("junior")) return "JHS";
-  if (norm.includes("shs") || norm.includes("senior")) return "SHS";
-  if (norm.includes("kg") || norm.includes("nursery") || norm.includes("kindergarten")) return "KG";
-  return "PRIMARY";
-}
 
 /** Format level scope parameter to canonical string if given as Record object. */
 function normalizeLevelScope(levels: Record<string, number> | string | undefined | null): string {
@@ -190,7 +181,7 @@ export function resolveApplicableFees(
   periodName?: string,
 ): { items: FeeStructureItem[]; totalDue: number } {
   const normClass = targetClass.trim().toLowerCase();
-  const effectiveLevel = targetLevelCode || inferLevelCode(targetClass);
+  const effectiveLevel = targetLevelCode || inferEducationLevel(targetClass);
 
   const applicable: FeeStructureItem[] = [];
   let totalDue = 0;
@@ -248,7 +239,7 @@ export function computeBillingRunPreview(
       return s.class_admitted.trim().toLowerCase() === targetValue.trim().toLowerCase();
     }
     if (targetScope === "education_level" && targetValue) {
-      const lvl = inferLevelCode(s.class_admitted);
+      const lvl = inferEducationLevel(s.class_admitted);
       return lvl.toLowerCase() === targetValue.trim().toLowerCase();
     }
     return true;
