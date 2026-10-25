@@ -7,7 +7,12 @@ import {
   studentTranscriptQuerySchema,
   updatePublicationSchema,
 } from "./results.schemas";
-import { calculateBroadsheetMatrix, isResultVisibleToLearner, StudentScoreRecord } from "./results";
+import {
+  calculateBroadsheetMatrix,
+  generatePrincipalRemark,
+  isResultVisibleToLearner,
+  StudentScoreRecord,
+} from "./results";
 
 /**
  * Retrieves the publication state and student withholding list for a class and term.
@@ -206,7 +211,7 @@ export const getStudentTranscript = createServerFn({ method: "GET" })
     // Fetch target student admission record
     const { data: student, error: studentErr } = await supabase
       .from("admissions")
-      .select("id, student_name, admission_number, class_admitted, profile_id")
+      .select("id, student_name, admission_number, class_admitted, student_profile_id, parent_profile_id, dob, gender")
       .eq("id", data.admissionId)
       .single();
 
@@ -215,20 +220,22 @@ export const getStudentTranscript = createServerFn({ method: "GET" })
     // Ownership check for non-staff/non-admin roles (students and parents)
     if (userRole !== "super_admin" && userRole !== "school_manager" && userRole !== "staff") {
       if (userRole === "student") {
-        if (student.profile_id !== userId) {
+        if (student.student_profile_id !== userId) {
           throw new Error("Forbidden: You can only view your own result transcript.");
         }
       } else if (userRole === "parent") {
-        // Verify parent-child relationship via admissions / guardian check
-        const { data: isParent } = await supabase
-          .from("admissions")
-          .select("id")
-          .eq("id", data.admissionId)
-          .or(`guardian_profile_id.eq.${userId},profile_id.eq.${userId}`)
-          .maybeSingle();
+        // Verify parent-child relationship via admissions check
+        if (student.parent_profile_id !== userId) {
+          const { data: isParent } = await supabase
+            .from("admissions")
+            .select("id")
+            .eq("id", data.admissionId)
+            .or(`parent_profile_id.eq.${userId},student_profile_id.eq.${userId}`)
+            .maybeSingle();
 
-        if (!isParent) {
-          throw new Error("Forbidden: You can only view results for your children.");
+          if (!isParent) {
+            throw new Error("Forbidden: You can only view results for your children.");
+          }
         }
       } else {
         throw new Error("Forbidden");
@@ -278,6 +285,10 @@ export const getStudentTranscript = createServerFn({ method: "GET" })
       (s) => s.admissionId === student.id,
     );
 
+    const principalRemark = studentRow
+      ? generatePrincipalRemark(studentRow.overallAverage)
+      : "";
+
     return {
       accessible: true,
       reason: null,
@@ -288,11 +299,15 @@ export const getStudentTranscript = createServerFn({ method: "GET" })
         studentName: student.student_name,
         admissionNumber: student.admission_number,
         className: student.class_admitted,
+        dob: student.dob ?? null,
+        gender: student.gender ?? null,
       },
       result: studentRow ?? null,
       subjectStats: broadsheetResult.broadsheet.subjectStats,
       classAverage: broadsheetResult.broadsheet.classAverage,
       totalStudents: broadsheetResult.broadsheet.totalStudents,
       publicationStatus,
+      gradeBands: broadsheetResult.broadsheet.gradeBands,
+      principalRemark,
     };
   });

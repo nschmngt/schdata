@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import { defaultRules } from "@/lib/academic-rules";
 import {
   calculateBroadsheetMatrix,
+  generatePrincipalRemark,
   isResultVisibleToLearner,
   StudentScoreRecord,
 } from "@/lib/results";
+import {
+  broadsheetQuerySchema,
+  studentTranscriptQuerySchema,
+  updatePublicationSchema,
+} from "@/lib/results.schemas";
 
 describe("Results Pure Business Logic & Broadsheet Calculations", () => {
   const rules = defaultRules(); // Class 50%, Exam 50%, Pass mark 50
@@ -155,5 +161,53 @@ describe("Results Pure Business Logic & Broadsheet Calculations", () => {
     expect(isResultVisibleToLearner("published", [], "s1", "student")).toBe(true);
     expect(isResultVisibleToLearner("published", ["s1"], "s1", "student")).toBe(false);
     expect(isResultVisibleToLearner("published", ["s1"], "s2", "student")).toBe(true);
+  });
+
+  it("attaches grade scale bands and generates appropriate principal remarks", () => {
+    const res = calculateBroadsheetMatrix(
+      "Term 1",
+      "Grade 1",
+      students,
+      subjects,
+      scores,
+      rules,
+      { status: "published", withheldStudentIds: [] },
+    );
+
+    expect(res.gradeBands).toBeDefined();
+    expect(res.gradeBands.length).toBeGreaterThan(0);
+    expect(res.gradeBands[0].grade).toBe("A+");
+
+    expect(generatePrincipalRemark(92)).toContain("outstanding");
+    expect(generatePrincipalRemark(82)).toContain("excellent");
+    expect(generatePrincipalRemark(72)).toContain("very good");
+    expect(generatePrincipalRemark(62)).toContain("Good effort");
+    expect(generatePrincipalRemark(52)).toContain("Satisfactory");
+    expect(generatePrincipalRemark(35)).toContain("Below expectations");
+  });
+
+  it("validates results module Zod input schemas", () => {
+    expect(
+      broadsheetQuerySchema.safeParse({ term: "First Term", className: "JHS 1" }).success,
+    ).toBe(true);
+
+    expect(
+      broadsheetQuerySchema.safeParse({ term: "", className: "JHS 1" }).success,
+    ).toBe(false);
+
+    const validPub = updatePublicationSchema.safeParse({
+      term: "First Term",
+      className: "JHS 1",
+      status: "published",
+      withheldStudentIds: ["00000000-0000-0000-0000-000000000001"],
+      notes: "Released after board approval",
+    });
+    expect(validPub.success).toBe(true);
+
+    const validTranscriptQuery = studentTranscriptQuerySchema.safeParse({
+      admissionId: "00000000-0000-0000-0000-000000000001",
+      term: "First Term",
+    });
+    expect(validTranscriptQuery.success).toBe(true);
   });
 });

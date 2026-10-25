@@ -448,26 +448,32 @@ export function ResultsManagement() {
                   </div>
 
                   {/* Student Details Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/30 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-4 rounded-lg bg-muted/30 text-sm border">
                     <div>
-                      <span className="text-xs text-muted-foreground block">Student Name</span>
+                      <span className="text-xs text-muted-foreground block font-medium">Student Name</span>
                       <span className="font-bold">{transcriptRes.student.studentName}</span>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground block">Admission No</span>
+                      <span className="text-xs text-muted-foreground block font-medium">Admission No</span>
                       <span className="font-semibold">{transcriptRes.student.admissionNumber}</span>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground block">Class Rank</span>
+                      <span className="text-xs text-muted-foreground block font-medium">Class Rank</span>
                       <span className="font-bold text-primary">
-                        {transcriptRes.result.position} of {transcriptRes.totalStudents}
+                        {transcriptRes.result.position} / {transcriptRes.totalStudents}
                       </span>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground block">Overall Average</span>
+                      <span className="text-xs text-muted-foreground block font-medium">Overall Average</span>
                       <span className="font-bold text-emerald-600">
                         {transcriptRes.result.overallAverage}%
                       </span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground block font-medium">Status</span>
+                      <Badge variant={transcriptRes.result.status === "Pass" ? "default" : "destructive"}>
+                        {transcriptRes.result.status}
+                      </Badge>
                     </div>
                   </div>
 
@@ -475,13 +481,14 @@ export function ResultsManagement() {
                   <div className="rounded-md border overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Subject</TableHead>
-                          <TableHead className="text-center">CA Score</TableHead>
-                          <TableHead className="text-center">Exam Score</TableHead>
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="font-bold">Subject</TableHead>
+                          <TableHead className="text-center font-bold">CA Score</TableHead>
+                          <TableHead className="text-center font-bold">Exam Score</TableHead>
                           <TableHead className="text-center font-bold">Total</TableHead>
-                          <TableHead className="text-center">Grade</TableHead>
-                          <TableHead className="text-center">Remarks</TableHead>
+                          <TableHead className="text-center font-bold">Grade</TableHead>
+                          <TableHead className="text-center font-bold">Subject Rank</TableHead>
+                          <TableHead className="text-center font-bold">Remarks</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -492,9 +499,12 @@ export function ResultsManagement() {
                             <TableCell className="text-center">{sub.examScore}</TableCell>
                             <TableCell className="text-center font-bold">{sub.totalScore}</TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="font-semibold">
+                              <Badge variant="outline" className="font-semibold px-2 py-0.5">
                                 {sub.grade}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-center text-xs font-medium">
+                              {sub.position ? `${sub.position} / ${transcriptRes.totalStudents}` : "—"}
                             </TableCell>
                             <TableCell className="text-center text-xs text-muted-foreground">
                               {sub.gradeLevel}
@@ -503,6 +513,49 @@ export function ResultsManagement() {
                         ))}
                       </TableBody>
                     </Table>
+                  </div>
+
+                  {/* Grading Scale Legend & Remarks */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                    {/* Grade Key Legend */}
+                    {transcriptRes.gradeBands && transcriptRes.gradeBands.length > 0 && (
+                      <div className="border rounded-lg p-3 bg-muted/10 space-y-2 md:col-span-1">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Grading Scale Key
+                        </h4>
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                          {transcriptRes.gradeBands.map((band) => (
+                            <div key={band.grade} className="flex items-center justify-between">
+                              <span className="font-bold">{band.grade}</span>
+                              <span className="text-muted-foreground">≥ {band.min}% ({band.level})</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Principal Remarks & Official Sign-off */}
+                    <div className="border rounded-lg p-4 bg-muted/10 space-y-4 md:col-span-2 flex flex-col justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                          Headteacher / Principal Remark
+                        </h4>
+                        <p className="text-sm italic font-medium text-foreground">
+                          "{transcriptRes.principalRemark || "Satisfactory overall effort."}"
+                        </p>
+                      </div>
+
+                      <div className="flex justify-between items-end pt-4 border-t border-dashed">
+                        <div>
+                          <p className="text-xs text-muted-foreground font-semibold">Date Issued</p>
+                          <p className="text-xs font-medium">{new Date().toLocaleDateString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="w-36 border-b border-foreground/40 mb-1"></div>
+                          <p className="text-xs font-bold text-muted-foreground">Authorized Signature & Stamp</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
