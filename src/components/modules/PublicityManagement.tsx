@@ -23,6 +23,12 @@ import {
   Calendar,
   CheckCircle2,
   ArrowUpRight,
+  ArrowUp,
+  ArrowDown,
+  Search,
+  Tag,
+  Share2,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -212,7 +218,7 @@ export function PublicityManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{analytics.totalArticles}</div>
-                <p className="text-xs text-muted-foreground mt-1">News and school stories</p>
+                <p className="text-xs text-muted-foreground mt-1">News and school stories ({analytics.totalViews} total views)</p>
               </CardContent>
             </Card>
           </div>
@@ -375,14 +381,14 @@ function NoticesSection({ notices, onRefresh, saveNotice, delNotice }: any) {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {notices.map((n: any) => {
-          const meta = NOTICE_LABEL_META[n.label] || NOTICE_LABEL_META.general;
+          const meta = NOTICE_LABEL_META[n.label] || NOTICE_LABEL_META["general"];
           const active = isNoticeActive(n.publish_at, n.expire_at);
           return (
             <Card key={n.id} className="flex flex-col justify-between">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant="outline" className={meta.badgeClass}>
-                    {meta.label}
+                  <Badge variant="outline" className={meta?.badgeClass || ""}>
+                    {meta?.label || n.label}
                   </Badge>
                   <div className="flex items-center gap-1">
                     {n.is_pinned && <Pin className="size-3.5 text-amber-500 fill-amber-500" />}
@@ -423,7 +429,7 @@ function NoticesSection({ notices, onRefresh, saveNotice, delNotice }: any) {
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Public Notice" : "New Public Notice"}</DialogTitle>
-            <DialogDescription>Configure notice attributes, labels, badges, and publication schedule.</DialogDescription>
+            <DialogDescription>Configure notice attributes, labels, badges, attachments, and publication schedule.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -477,6 +483,17 @@ function NoticesSection({ notices, onRefresh, saveNotice, delNotice }: any) {
               <div className="space-y-2">
                 <Label>Read More Link (Optional)</Label>
                 <Input value={form.readMoreLink} onChange={(e) => setForm({ ...form, readMoreLink: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Attachment Document URL</Label>
+                <Input placeholder="https://..." value={form.attachmentUrl} onChange={(e) => setForm({ ...form, attachmentUrl: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Attachment File Name</Label>
+                <Input placeholder="e.g. Schedule.pdf" value={form.attachmentName} onChange={(e) => setForm({ ...form, attachmentName: e.target.value })} />
               </div>
             </div>
 
@@ -616,7 +633,10 @@ function CircularsSection({ circulars, onRefresh, saveCircular, delCircular }: a
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span className="font-mono font-semibold">{c.reference_number}</span>
-                <Badge variant="outline">{c.visibility}</Badge>
+                <div className="flex items-center gap-1">
+                  {c.is_featured && <Star className="size-3.5 text-blue-500 fill-blue-500" />}
+                  <Badge variant="outline">{c.visibility}</Badge>
+                </div>
               </div>
               <CardTitle className="text-base mt-2 line-clamp-1">{c.title}</CardTitle>
               <CardDescription className="line-clamp-2">{c.summary || c.issuing_department}</CardDescription>
@@ -652,7 +672,7 @@ function CircularsSection({ circulars, onRefresh, saveCircular, delCircular }: a
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Circular" : "Issue Official Circular"}</DialogTitle>
-            <DialogDescription>Specify circular details, document attachments, and visibility controls.</DialogDescription>
+            <DialogDescription>Specify circular details, document attachments, deep links, and visibility controls.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -690,8 +710,18 @@ function CircularsSection({ circulars, onRefresh, saveCircular, delCircular }: a
             </div>
 
             <div className="space-y-2">
+              <Label>Featured Image URL (Optional)</Label>
+              <Input placeholder="https://..." value={form.featuredImage} onChange={(e) => setForm({ ...form, featuredImage: e.target.value })} />
+            </div>
+
+            <div className="space-y-2">
               <Label>Short Summary</Label>
               <Textarea rows={2} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Full Circular Content</Label>
+              <Textarea rows={4} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -702,6 +732,24 @@ function CircularsSection({ circulars, onRefresh, saveCircular, delCircular }: a
               <div className="space-y-2">
                 <Label>Document Name</Label>
                 <Input value={form.documentName} onChange={(e) => setForm({ ...form, documentName: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>External Link</Label>
+                <Input placeholder="https://..." value={form.externalLink} onChange={(e) => setForm({ ...form, externalLink: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Internal Deep Link</Label>
+                <Input placeholder="/portal/..." value={form.deepLink} onChange={(e) => setForm({ ...form, deepLink: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6 pt-2">
+              <div className="flex items-center gap-2">
+                <Switch id="circFeatured" checked={form.isFeatured} onCheckedChange={(val) => setForm({ ...form, isFeatured: val })} />
+                <Label htmlFor="circFeatured">Feature Circular</Label>
               </div>
             </div>
 
@@ -752,6 +800,8 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
     overlayOpacity: 40,
     focalPoint: "center",
     cropMode: "cover",
+    startDate: null,
+    endDate: null,
   });
 
   const handleOpenBanner = (item?: any) => {
@@ -813,6 +863,8 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
         overlayOpacity: 40,
         focalPoint: "center",
         cropMode: "cover",
+        startDate: null,
+        endDate: null,
       });
     }
     setSlideOpen(true);
@@ -830,12 +882,28 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
     } else {
       updated.push(slideForm);
     }
+    // Re-index orderIndex cleanly
+    updated = updated.map((s, idx) => ({ ...s, orderIndex: idx }));
     setForm({ ...form, slides: updated });
     setSlideOpen(false);
   };
 
+  const handleMoveSlide = (idx: number, direction: "up" | "down") => {
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= form.slides.length) return;
+    const updated = [...form.slides];
+    const slideA = updated[idx];
+    const slideB = updated[targetIdx];
+    if (!slideA || !slideB) return;
+    updated[idx] = slideB;
+    updated[targetIdx] = slideA;
+    const reindexed = updated.map((s, i) => ({ ...s, orderIndex: i }));
+    setForm({ ...form, slides: reindexed });
+  };
+
   const handleDeleteSlide = (id: string) => {
-    setForm({ ...form, slides: form.slides.filter((s) => s.id !== id) });
+    const updated = form.slides.filter((s) => s.id !== id).map((s, i) => ({ ...s, orderIndex: i }));
+    setForm({ ...form, slides: updated });
   };
 
   const handleSubmitBanner = async (e: React.FormEvent) => {
@@ -968,6 +1036,10 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
                 <Switch id="showIndicators" checked={form.showIndicators} onCheckedChange={(val) => setForm({ ...form, showIndicators: val })} />
                 <Label htmlFor="showIndicators">Indicators</Label>
               </div>
+              <div className="flex items-center gap-2">
+                <Switch id="showPause" checked={form.showPauseControls} onCheckedChange={(val) => setForm({ ...form, showPauseControls: val })} />
+                <Label htmlFor="showPause">Pause Controls</Label>
+              </div>
             </div>
 
             {/* SLIDES BUILDER */}
@@ -983,6 +1055,14 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
                 {form.slides.map((slide, idx) => (
                   <div key={slide.id} className="flex items-center justify-between p-3 rounded-md border bg-card text-card-foreground">
                     <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-0.5">
+                        <Button type="button" variant="ghost" size="icon" className="size-5" disabled={idx === 0} onClick={() => handleMoveSlide(idx, "up")}>
+                          <ArrowUp className="size-3" />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon" className="size-5" disabled={idx === form.slides.length - 1} onClick={() => handleMoveSlide(idx, "down")}>
+                          <ArrowDown className="size-3" />
+                        </Button>
+                      </div>
                       <span className="text-xs font-mono font-bold text-muted-foreground w-4">{idx + 1}</span>
                       {slide.imageUrl && <img src={slide.imageUrl} alt="" className="size-10 object-cover rounded" />}
                       <div>
@@ -1016,7 +1096,7 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingSlide ? "Edit Photo Slide Settings" : "Add Photo Slide"}</DialogTitle>
-            <DialogDescription>Configure granular photo settings including overlay, button, focal point and scheduling.</DialogDescription>
+            <DialogDescription>Configure granular photo settings including overlay, button, focal point, crop mode, and scheduling.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveSlide} className="space-y-4">
             <div className="space-y-2">
@@ -1051,7 +1131,7 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Text Alignment</Label>
                 <Select value={slideForm.textAlignment} onValueChange={(val: any) => setSlideForm({ ...slideForm, textAlignment: val })}>
@@ -1081,6 +1161,18 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label>Crop Mode</Label>
+                <Select value={slideForm.cropMode} onValueChange={(val: any) => setSlideForm({ ...slideForm, cropMode: val })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cover">cover</SelectItem>
+                    <SelectItem value="contain">contain</SelectItem>
+                    <SelectItem value="fill">fill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -1095,6 +1187,17 @@ function BannersSection({ banners, onRefresh, saveBanner, delBanner }: any) {
               <div className="space-y-2">
                 <Label>Overlay Opacity (%)</Label>
                 <Input type="number" min="0" max="100" value={slideForm.overlayOpacity} onChange={(e) => setSlideForm({ ...slideForm, overlayOpacity: parseInt(e.target.value) || 0 })} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Scheduling Date</Label>
+                <Input type="datetime-local" value={slideForm.startDate ? new Date(slideForm.startDate).toISOString().slice(0, 16) : ""} onChange={(e) => setSlideForm({ ...slideForm, startDate: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+              </div>
+              <div className="space-y-2">
+                <Label>End Scheduling Date</Label>
+                <Input type="datetime-local" value={slideForm.endDate ? new Date(slideForm.endDate).toISOString().slice(0, 16) : ""} onChange={(e) => setSlideForm({ ...slideForm, endDate: e.target.value ? new Date(e.target.value).toISOString() : null })} />
               </div>
             </div>
 
@@ -1234,7 +1337,11 @@ function ArticlesSection({ articles, onRefresh, saveArticle, delArticle }: any) 
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <Badge variant="outline">{a.category}</Badge>
-                <Badge variant={a.status === "published" ? "default" : "secondary"}>{a.status}</Badge>
+                <div className="flex items-center gap-1">
+                  {a.is_pinned && <Pin className="size-3.5 text-amber-500 fill-amber-500" />}
+                  {a.is_featured && <Star className="size-3.5 text-blue-500 fill-blue-500" />}
+                  <Badge variant={a.status === "published" ? "default" : "secondary"}>{a.status}</Badge>
+                </div>
               </div>
               <CardTitle className="text-base mt-2 line-clamp-1">{a.title}</CardTitle>
               <CardDescription className="line-clamp-2">{a.short_summary || a.headline}</CardDescription>
@@ -1264,7 +1371,7 @@ function ArticlesSection({ articles, onRefresh, saveArticle, delArticle }: any) 
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Article" : "Create New Article"}</DialogTitle>
-            <DialogDescription>Configure formatted publication text, author attribution, and SEO details.</DialogDescription>
+            <DialogDescription>Configure formatted publication text, author attribution, action buttons, and SEO details.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -1281,6 +1388,11 @@ function ArticlesSection({ articles, onRefresh, saveArticle, delArticle }: any) 
                 <Label>Category</Label>
                 <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Featured Image URL</Label>
+              <Input placeholder="https://..." value={form.featuredImage} onChange={(e) => setForm({ ...form, featuredImage: e.target.value })} />
             </div>
 
             <div className="space-y-2">
@@ -1312,6 +1424,33 @@ function ArticlesSection({ articles, onRefresh, saveArticle, delArticle }: any) 
               <div className="space-y-2">
                 <Label>Action Button URL</Label>
                 <Input placeholder="e.g. /portal/admissions" value={form.actionButtonUrl} onChange={(e) => setForm({ ...form, actionButtonUrl: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Relevant Details Link</Label>
+              <Input placeholder="https://..." value={form.relevantDetailsLink} onChange={(e) => setForm({ ...form, relevantDetailsLink: e.target.value })} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+              <div className="space-y-2">
+                <Label>SEO Title</Label>
+                <Input placeholder="SEO Optimization Title" value={form.seoTitle} onChange={(e) => setForm({ ...form, seoTitle: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>SEO Keywords</Label>
+                <Input placeholder="e.g. school, admissions, sports" value={form.seoKeywords} onChange={(e) => setForm({ ...form, seoKeywords: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6 pt-2">
+              <div className="flex items-center gap-2">
+                <Switch id="artPinned" checked={form.isPinned} onCheckedChange={(val) => setForm({ ...form, isPinned: val })} />
+                <Label htmlFor="artPinned">Pin Article</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="artFeatured" checked={form.isFeatured} onCheckedChange={(val) => setForm({ ...form, isFeatured: val })} />
+                <Label htmlFor="artFeatured">Feature Article</Label>
               </div>
             </div>
 
@@ -1414,6 +1553,7 @@ function GallerySection({ gallery, onRefresh, saveGallery, delGallery }: any) {
             <div className="aspect-video bg-muted relative">
               <img src={g.media_url} alt="" className="w-full h-full object-cover" />
               <Badge className="absolute top-2 left-2" variant="secondary">{g.category}</Badge>
+              {g.is_featured && <Star className="size-4 text-amber-400 fill-amber-400 absolute top-2 right-2" />}
             </div>
             <CardHeader className="p-3">
               <CardTitle className="text-sm line-clamp-1">{g.title}</CardTitle>
@@ -1442,9 +1582,40 @@ function GallerySection({ gallery, onRefresh, saveGallery, delGallery }: any) {
               <Input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Media Type</Label>
+                <Select value={form.mediaType} onValueChange={(val: any) => setForm({ ...form, mediaType: val })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="image">image</SelectItem>
+                    <SelectItem value="video">video</SelectItem>
+                    <SelectItem value="document">document</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={(val: any) => setForm({ ...form, status: val })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PUBLICITY_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Media URL *</Label>
               <Input required value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Thumbnail URL (Optional)</Label>
+              <Input value={form.thumbnailUrl} onChange={(e) => setForm({ ...form, thumbnailUrl: e.target.value })} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1456,6 +1627,11 @@ function GallerySection({ gallery, onRefresh, saveGallery, delGallery }: any) {
                 <Label>Caption</Label>
                 <Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Switch id="galFeatured" checked={form.isFeatured} onCheckedChange={(val) => setForm({ ...form, isFeatured: val })} />
+              <Label htmlFor="galFeatured">Feature in Gallery Showcase</Label>
             </div>
 
             <DialogFooter>
@@ -1476,18 +1652,46 @@ function PublicPreviewSection({ notices, circulars, banners, articles, gallery }
   const activeSlides = heroBanner ? filterActiveSlides(heroBanner.slides) : [];
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(heroBanner?.auto_flip ?? true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedArticle, setSelectedArticle] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isPlaying || activeSlides.length <= 1) return;
+    const duration = heroBanner?.slide_duration || 5000;
+    const interval = setInterval(() => {
+      setCurrentSlideIndex((prev) => (prev + 1) % activeSlides.length);
+    }, duration);
+    return () => clearInterval(interval);
+  }, [isPlaying, activeSlides.length, heroBanner?.slide_duration]);
+
+  const filteredNotices = activeNotices.filter((n: any) =>
+    n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    n.summary.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-8 border p-6 rounded-xl bg-background">
-      <div className="border-b pb-4">
-        <Badge variant="outline" className="mb-2">Live Public Landing Page Preview</Badge>
-        <h2 className="text-2xl font-bold">Publicity Showcase</h2>
-        <p className="text-sm text-muted-foreground">Inspection preview of active landing page content visible to site visitors.</p>
+      <div className="border-b pb-4 flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <Badge variant="outline" className="mb-2">Live Public Landing Page Preview</Badge>
+          <h2 className="text-2xl font-bold">Publicity Showcase</h2>
+          <p className="text-sm text-muted-foreground">Inspection preview of active landing page content visible to site visitors.</p>
+        </div>
+        <div className="relative w-full max-w-xs">
+          <Search className="size-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            placeholder="Search active notices..."
+            className="pl-9 text-xs"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* HERO BANNER SLIDESHOW PREVIEW */}
-      {activeSlides.length > 0 && (
-        <div className="relative overflow-hidden rounded-xl bg-slate-900 text-white min-h-[300px] flex items-center justify-center">
+      {activeSlides.length > 0 ? (
+        <div className="relative overflow-hidden rounded-xl bg-slate-900 text-white min-h-[340px] flex items-center justify-center group">
           {activeSlides[currentSlideIndex] && (
             <div className="absolute inset-0">
               <img
@@ -1509,16 +1713,56 @@ function PublicPreviewSection({ notices, circulars, banners, articles, gallery }
           )}
 
           <div className="relative z-10 p-8 text-center max-w-2xl space-y-3">
+            {activeSlides[currentSlideIndex]?.caption && (
+              <Badge variant="secondary" className="bg-white/20 text-white border-none">
+                {activeSlides[currentSlideIndex]?.caption}
+              </Badge>
+            )}
             <h3 className="text-3xl font-bold">{activeSlides[currentSlideIndex]?.heading}</h3>
             <p className="text-sm opacity-90">{activeSlides[currentSlideIndex]?.message}</p>
             {activeSlides[currentSlideIndex]?.buttonLabel && (
-              <Button size="sm" className="mt-2">
-                {activeSlides[currentSlideIndex]?.buttonLabel}
+              <Button size="sm" className="mt-2" asChild>
+                <a href={activeSlides[currentSlideIndex]?.buttonUrl || "#"}>
+                  {activeSlides[currentSlideIndex]?.buttonLabel}
+                </a>
               </Button>
             )}
           </div>
 
-          {activeSlides.length > 1 && (
+          {/* ARROWS & CONTROLS */}
+          {heroBanner?.show_arrows && activeSlides.length > 1 && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute left-3 z-20 text-white bg-black/30 hover:bg-black/60 rounded-full"
+                onClick={() => setCurrentSlideIndex((prev) => (prev - 1 + activeSlides.length) % activeSlides.length)}
+              >
+                <ChevronLeft className="size-6" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-3 z-20 text-white bg-black/30 hover:bg-black/60 rounded-full"
+                onClick={() => setCurrentSlideIndex((prev) => (prev + 1) % activeSlides.length)}
+              >
+                <ChevronRight className="size-6" />
+              </Button>
+            </>
+          )}
+
+          {heroBanner?.show_pause_controls && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-3 right-3 z-20 text-white bg-black/30 hover:bg-black/60 rounded-full size-8"
+              onClick={() => setIsPlaying(!isPlaying)}
+            >
+              {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+            </Button>
+          )}
+
+          {heroBanner?.show_indicators && activeSlides.length > 1 && (
             <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center gap-2">
               {activeSlides.map((_, i) => (
                 <button
@@ -1530,23 +1774,32 @@ function PublicPreviewSection({ notices, circulars, banners, articles, gallery }
             </div>
           )}
         </div>
+      ) : (
+        <div className="p-8 text-center border rounded-xl bg-muted/20 text-muted-foreground">
+          No active hero banner slides published.
+        </div>
       )}
 
       {/* NOTICE BOARD & CIRCULARS GRID */}
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-4">
           <h3 className="text-lg font-bold flex items-center gap-2">
-            <Megaphone className="size-5 text-primary" /> Active Notice Board ({activeNotices.length})
+            <Megaphone className="size-5 text-primary" /> Active Notice Board ({filteredNotices.length})
           </h3>
           <div className="space-y-3">
-            {activeNotices.map((n: any) => (
-              <div key={n.id} className="p-4 rounded-lg border bg-card text-card-foreground space-y-1">
+            {filteredNotices.map((n: any) => (
+              <div key={n.id} className="p-4 rounded-lg border bg-card text-card-foreground space-y-2">
                 <div className="flex items-center justify-between">
                   <Badge variant="outline">{NOTICE_LABEL_META[n.label]?.label || n.label}</Badge>
                   <span className="text-xs text-muted-foreground">{new Date(n.publish_at).toLocaleDateString()}</span>
                 </div>
                 <h4 className="font-semibold">{n.title}</h4>
                 <p className="text-xs text-muted-foreground">{n.summary || n.content}</p>
+                {n.attachment_url && (
+                  <a href={n.attachment_url} target="_blank" rel="noreferrer" className="text-xs text-primary flex items-center gap-1 hover:underline pt-1">
+                    <Download className="size-3.5" /> Download {n.attachment_name || "Attachment"}
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -1558,18 +1811,90 @@ function PublicPreviewSection({ notices, circulars, banners, articles, gallery }
           </h3>
           <div className="space-y-3">
             {publicCirculars.map((c: any) => (
-              <div key={c.id} className="p-4 rounded-lg border bg-card text-card-foreground space-y-1">
+              <div key={c.id} className="p-4 rounded-lg border bg-card text-card-foreground space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono font-semibold">{c.reference_number}</span>
                   <span className="text-xs text-muted-foreground">{c.issue_date}</span>
                 </div>
                 <h4 className="font-semibold">{c.title}</h4>
                 <p className="text-xs text-muted-foreground">{c.summary}</p>
+                <div className="flex items-center gap-3 pt-1">
+                  {c.document_url && (
+                    <a href={c.document_url} target="_blank" rel="noreferrer" className="text-xs text-primary flex items-center gap-1 hover:underline">
+                      <Download className="size-3.5" /> Official PDF
+                    </a>
+                  )}
+                  {c.external_link && (
+                    <a href={c.external_link} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground flex items-center gap-1 hover:underline">
+                      <ExternalLink className="size-3.5" /> External Link
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* ARTICLES PUBLIC SHOWCASE */}
+      <div className="space-y-4 pt-6 border-t">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          <Newspaper className="size-5 text-primary" /> Featured News & Publications
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {articles.filter((a: any) => a.status === "published").map((art: any) => (
+            <Card key={art.id} className="cursor-pointer hover:border-primary transition-colors" onClick={() => setSelectedArticle(art)}>
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline">{art.category}</Badge>
+                  <span className="text-xs text-muted-foreground">{new Date(art.publication_date).toLocaleDateString()}</span>
+                </div>
+                <CardTitle className="text-base mt-2 line-clamp-1">{art.title}</CardTitle>
+                <CardDescription className="line-clamp-2">{art.short_summary || art.headline}</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xs text-primary flex items-center gap-1 font-medium mt-2">
+                  Read Article <ArrowUpRight className="size-3.5" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* ARTICLE READER MODAL */}
+      <Dialog open={!!selectedArticle} onOpenChange={() => setSelectedArticle(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedArticle && (
+            <>
+              <DialogHeader>
+                <Badge variant="outline" className="w-fit mb-2">{selectedArticle.category}</Badge>
+                <DialogTitle className="text-2xl">{selectedArticle.title}</DialogTitle>
+                <DialogDescription>
+                  Published on {new Date(selectedArticle.publication_date).toLocaleDateString()} by {selectedArticle.author_name || "Editorial"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 my-2">
+                {selectedArticle.featured_image && (
+                  <img src={selectedArticle.featured_image} alt="" className="w-full h-48 object-cover rounded-lg" />
+                )}
+                {selectedArticle.headline && (
+                  <p className="text-sm font-semibold italic text-muted-foreground">{selectedArticle.headline}</p>
+                )}
+                <div className="text-sm space-y-2 whitespace-pre-wrap leading-relaxed">
+                  {selectedArticle.full_content || selectedArticle.short_summary}
+                </div>
+                {selectedArticle.action_button_label && (
+                  <Button size="sm" asChild className="mt-4">
+                    <a href={selectedArticle.action_button_url || "#"}>{selectedArticle.action_button_label}</a>
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

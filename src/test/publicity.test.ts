@@ -14,6 +14,7 @@ import {
   calculatePublicityAnalytics,
   generateSlug,
 } from "@/lib/publicity";
+import { defaultOpsRules, parseOpsRules, opsValue } from "@/lib/operations-rules";
 
 describe("Publicity Module Schemas & Validations", () => {
   it("validates valid public notice input", () => {
@@ -25,10 +26,15 @@ describe("Publicity Module Schemas & Validations", () => {
       isFeatured: true,
       isPinned: true,
       publishAt: "2026-03-01T08:00:00.000Z",
+      attachmentUrl: "https://example.com/sports_schedule.pdf",
+      attachmentName: "sports_schedule.pdf",
       status: "published",
     };
     const parsed = noticeSchema.safeParse(validNotice);
     expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.attachmentName).toBe("sports_schedule.pdf");
+    }
   });
 
   it("rejects notice when title is too short", () => {
@@ -46,6 +52,8 @@ describe("Publicity Module Schemas & Validations", () => {
       title: "Mid-Term Academic Calendar Revision",
       issuingDepartment: "Office of the Registrar",
       issueDate: "2026-03-15",
+      documentUrl: "https://example.com/circ_004.pdf",
+      documentName: "Calendar_Revision.pdf",
       visibility: "public",
       status: "published",
     };
@@ -91,8 +99,8 @@ describe("Publicity Module Schemas & Validations", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.slides).toHaveLength(2);
-      expect(parsed.data.slides[0].buttonLabel).toBe("Apply Now");
-      expect(parsed.data.slides[1].textColor).toBe("#ffea00");
+      expect(parsed.data.slides[0]?.buttonLabel).toBe("Apply Now");
+      expect(parsed.data.slides[1]?.textColor).toBe("#ffea00");
     }
   });
 
@@ -109,9 +117,46 @@ describe("Publicity Module Schemas & Validations", () => {
       authorName: "Dr. Jane Doe",
       category: "Achievements",
       publicationDate: "2026-03-20T10:00:00.000Z",
+      seoTitle: "National Science Olympiad 2026 Winners",
+      seoKeywords: "science, olympiad, robotics, achievement",
     };
     const parsed = articleSchema.safeParse(articleInput);
     expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.seoTitle).toBe("National Science Olympiad 2026 Winners");
+    }
+  });
+
+  it("validates media gallery schema with tags", () => {
+    const validGallery = {
+      title: "Inter-House Football Championship",
+      caption: "Highlights from the final match",
+      category: "Sports",
+      mediaType: "image",
+      mediaUrl: "https://example.com/football_finals.jpg",
+      tags: ["sports", "football", "finals"],
+      isFeatured: true,
+      status: "published",
+    };
+    const parsed = mediaGallerySchema.safeParse(validGallery);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.tags).toHaveLength(3);
+    }
+  });
+});
+
+describe("Operations Configuration & Publicity Domain Rules", () => {
+  it("includes default operations rules for publicity domain", () => {
+    const rules = defaultOpsRules();
+    expect(rules.publicity).toBeDefined();
+    expect(rules.publicity.length).toBeGreaterThan(0);
+
+    const retentionDays = opsValue(rules, "publicity", "notice-retention-days");
+    expect(retentionDays).toBe(90);
+
+    const maxSlides = opsValue(rules, "publicity", "max-banner-slides");
+    expect(maxSlides).toBe(10);
   });
 });
 
@@ -160,8 +205,8 @@ describe("Publicity Pure Business Logic & Scheduling Controls", () => {
 
     const filtered = filterActiveSlides(slides, now);
     expect(filtered).toHaveLength(2);
-    expect(filtered[0].id).toBe("slide-1");
-    expect(filtered[1].id).toBe("slide-3");
+    expect(filtered[0]?.id).toBe("slide-1");
+    expect(filtered[1]?.id).toBe("slide-3");
   });
 
   it("calculates publicity analytics accurately across modules", () => {
