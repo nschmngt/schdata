@@ -955,12 +955,13 @@ function StudentDetailView({
           </section>
         </TabsContent>
 
-        {/* Tab 5: Operations & Exeat */}
+        {/* Tab 5: Operations & Library */}
         <TabsContent value="operations" className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <DetailItem label="Current Permission Status" value={operationsSummary.currentExeatStatus === "out" ? "Temporarily Out" : "In School"} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailItem label="Permission Status" value={operationsSummary.currentExeatStatus === "out" ? "Temporarily Out" : "In School"} />
             <DetailItem label="Total Exeat Logs" value={operationsSummary.totalExeats.toString()} />
-            <DetailItem label="Library Max Loan Days" value={`${operationsSummary.libraryLoanDays} days`} />
+            <DetailItem label="Active Library Loans" value={`${operationsSummary.activeLibraryLoans} (Overdue: ${operationsSummary.overdueLibraryLoans})`} />
+            <DetailItem label="Library Policy Limit" value={`Max ${operationsSummary.libraryMaxLoans} loans (${operationsSummary.libraryLoanDays} days max)`} />
           </div>
 
           <section className="surface p-5 space-y-4">
@@ -981,6 +982,47 @@ function StudentDetailView({
                 e.return_at ? new Date(e.return_at).toLocaleString() : "—",
               ])}
               empty="No exeat permissions logged for this student."
+            />
+          </section>
+
+          <section className="surface p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Library className="size-4 text-primary" /> Library Book Loans & Borrowing History
+              </h3>
+              <Badge variant="outline">Total Borrowed: {operationsSummary.totalLibraryLoans}</Badge>
+            </div>
+            <Table
+              head={["Book Title", "Author", "Issue Date", "Due Date", "Returned At", "Fine Amount", "Status"]}
+              rows={(detail.libraryLoans || []).map((l: any) => [
+                l.library_books?.title || "Book record",
+                l.library_books?.author || "—",
+                l.issued_at ? new Date(l.issued_at).toLocaleDateString() : "—",
+                l.due_date || "—",
+                l.returned_at ? new Date(l.returned_at).toLocaleDateString() : "Not returned",
+                l.fine_amount ? money(Number(l.fine_amount)) : money(0),
+                l.status || "issued",
+              ])}
+              empty="No library book loan history for this student."
+            />
+          </section>
+
+          <section className="surface p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <BookOpen className="size-4 text-primary" /> Active Library Reservations
+              </h3>
+              <Badge variant="outline">Pending: {operationsSummary.activeLibraryReservations}</Badge>
+            </div>
+            <Table
+              head={["Book Title", "Author", "Reserved Date", "Status"]}
+              rows={(detail.libraryReservations || []).map((r: any) => [
+                r.library_books?.title || "Book record",
+                r.library_books?.author || "—",
+                r.reserved_at ? new Date(r.reserved_at).toLocaleDateString() : "—",
+                r.status || "pending",
+              ])}
+              empty="No active library reservations."
             />
           </section>
         </TabsContent>
