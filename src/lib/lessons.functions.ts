@@ -255,6 +255,20 @@ export const deleteLesson = createServerFn({ method: "POST" })
   });
 
 /** Mark a lesson as completed for the authenticated student. */
+/** Fetch current user's teaching scope (classes & subjects) for auto-populating teacher forms in UI. */
+export const getMyTeachingScope = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const scope = await loadTeachingScope(context.supabase, context.userId);
+    return {
+      isAdmin: scope.isAdmin,
+      role: scope.role,
+      classes: scope.classes,
+      subjects: scope.subjects,
+      pairs: scope.pairs,
+    };
+  });
+
 export const completeLesson = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => completeLessonSchema.parse(d))
