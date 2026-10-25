@@ -8,14 +8,21 @@ export type AnnouncementStatus = (typeof ANNOUNCEMENT_STATUSES)[number];
 
 export const announcementSchema = z.object({
   id: z.string().uuid().optional(),
-  title: z.string().trim().min(2, "Title must be at least 2 characters").max(200, "Title cannot exceed 200 characters"),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Title must be at least 2 characters")
+    .max(200, "Title cannot exceed 200 characters"),
   summary: z.string().trim().max(500, "Summary cannot exceed 500 characters").default(""),
   content: z.string().trim().min(2, "Content cannot be empty"),
   audience: z.string().trim().min(1, "Audience is required").default("Everyone"),
   targetRole: z.string().trim().default(""),
   targetClassId: z.string().uuid().nullable().optional(),
   priority: z.enum(ANNOUNCEMENT_PRIORITIES).default("normal"),
-  channels: z.array(z.string().trim().min(1)).min(1, "At least one communication channel is required").default(["In-app"]),
+  channels: z
+    .array(z.string().trim().min(1))
+    .min(1, "At least one communication channel is required")
+    .default(["In-app"]),
   attachmentUrl: z.string().trim().default(""),
   attachmentName: z.string().trim().default(""),
   isPinned: z.boolean().default(false),

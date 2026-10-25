@@ -25,7 +25,12 @@ describe("Messaging Module - Operations Configuration Integration", () => {
       messaging: [
         { key: "direct-messages", label: "Allow direct messages", value: true },
         { key: "max-length", label: "Maximum message length", value: 500, unit: "chars" },
-        { key: "announcement-days", label: "Announcements stay visible for", value: 14, unit: "days" },
+        {
+          key: "announcement-days",
+          label: "Announcements stay visible for",
+          value: 14,
+          unit: "days",
+        },
       ],
     };
 
@@ -35,7 +40,13 @@ describe("Messaging Module - Operations Configuration Integration", () => {
     expect(policies.maxMessageLength).toBe(500);
     expect(policies.announcementVisibilityDays).toBe(14);
     expect(policies.configuredChannels).toEqual(["In-app", "Email", "SMS", "Push"]);
-    expect(policies.configuredAudiences).toEqual(["Everyone", "Staff", "Parents", "Students", "Alumni"]);
+    expect(policies.configuredAudiences).toEqual([
+      "Everyone",
+      "Staff",
+      "Parents",
+      "Students",
+      "Alumni",
+    ]);
   });
 
   it("handles disabled direct messaging rule in Operations Configuration", () => {
@@ -102,6 +113,7 @@ describe("Messaging Module - Announcement Lifecycle & Audience Scoping", () => {
     const annEveryone = { audience: "Everyone" };
     const annStaffOnly = { audience: "Staff" };
     const annParentsOnly = { audience: "Parents" };
+    const annClassSpecific = { audience: "Students", target_class_id: "class-123" };
 
     // Super admin & managers see everything
     expect(isUserInAnnouncementAudience("super_admin", null, annStaffOnly)).toBe(true);
@@ -115,6 +127,10 @@ describe("Messaging Module - Announcement Lifecycle & Audience Scoping", () => {
     // Student sees Everyone but not Parents
     expect(isUserInAnnouncementAudience("student", null, annEveryone)).toBe(true);
     expect(isUserInAnnouncementAudience("student", null, annParentsOnly)).toBe(false);
+
+    // Class target matching
+    expect(isUserInAnnouncementAudience("student", "class-123", annClassSpecific)).toBe(true);
+    expect(isUserInAnnouncementAudience("student", "class-999", annClassSpecific)).toBe(false);
   });
 });
 
@@ -130,9 +146,27 @@ describe("Messaging Module - Analytics Aggregation", () => {
     };
 
     const mockAnnouncements = [
-      { id: "1", status: "published", priority: "urgent", publish_at: "2025-02-28T10:00:00Z", channels: ["In-app", "Email"] },
-      { id: "2", status: "published", priority: "normal", publish_at: "2025-02-20T10:00:00Z", channels: ["In-app"] },
-      { id: "3", status: "draft", priority: "low", publish_at: "2025-03-05T10:00:00Z", channels: ["SMS"] },
+      {
+        id: "1",
+        status: "published",
+        priority: "urgent",
+        publish_at: "2025-02-28T10:00:00Z",
+        channels: ["In-app", "Email"],
+      },
+      {
+        id: "2",
+        status: "published",
+        priority: "normal",
+        publish_at: "2025-02-20T10:00:00Z",
+        channels: ["In-app"],
+      },
+      {
+        id: "3",
+        status: "draft",
+        priority: "low",
+        publish_at: "2025-03-05T10:00:00Z",
+        channels: ["SMS"],
+      },
     ];
 
     const mockConversations = [
