@@ -19,10 +19,10 @@ export const getMessagingConfigAndRules = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, profile } = context;
 
-    const { data: tenantSettings } = await supabase
-      .from("tenant_settings")
-      .select("features")
-      .maybeSingle();
+    const [{ data: tenantSettings }, { data: schoolClasses }] = await Promise.all([
+      supabase.from("tenant_settings").select("features").maybeSingle(),
+      supabase.from("school_classes").select("id, name, code, level_code").order("name"),
+    ]);
 
     const opsRaw = tenantSettings?.features?.[OPS_FEATURE_KEY] ?? null;
     const policies = extractMessagingPolicies(opsRaw);
@@ -35,6 +35,7 @@ export const getMessagingConfigAndRules = createServerFn({ method: "GET" })
         fullName: profile.full_name || profile.email,
         email: profile.email,
       },
+      classes: schoolClasses || [],
     };
   });
 
@@ -49,10 +50,12 @@ export const getAnnouncements = createServerFn({ method: "GET" })
 
     const { data, error } = await supabase
       .from("messaging_announcements")
-      .select(`
+      .select(
+        `
         *,
         messaging_announcement_reads(id, user_id, read_at)
-      `)
+      `,
+      )
       .order("is_pinned", { ascending: false })
       .order("publish_at", { ascending: false });
 
@@ -76,7 +79,11 @@ export const upsertAnnouncement = createServerFn({ method: "POST" })
   .validator((d: unknown) => announcementSchema.parse(d))
   .handler(async ({ context, data }) => {
     const { supabase, profile } = context;
-    if (profile.role !== "super_admin" && profile.role !== "school_manager" && profile.role !== "staff") {
+    if (
+      profile.role !== "super_admin" &&
+      profile.role !== "school_manager" &&
+      profile.role !== "staff"
+    ) {
       throw new Error("Unauthorized to create or edit announcements.");
     }
 
@@ -126,7 +133,11 @@ export const deleteAnnouncement = createServerFn({ method: "POST" })
   .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const { supabase, profile } = context;
-    if (profile.role !== "super_admin" && profile.role !== "school_manager" && profile.role !== "staff") {
+    if (
+      profile.role !== "super_admin" &&
+      profile.role !== "school_manager" &&
+      profile.role !== "staff"
+    ) {
       throw new Error("Unauthorized to delete announcements.");
     }
 
@@ -147,7 +158,7 @@ export const markAnnouncementRead = createServerFn({ method: "POST" })
         user_id: profile.id,
         read_at: new Date().toISOString(),
       },
-      { onConflict: "announcement_id,user_id" }
+      { onConflict: "announcement_id,user_id" },
     );
 
     if (error) throw new Error(error.message);
@@ -176,7 +187,8 @@ export const getConversations = createServerFn({ method: "GET" })
 
     const { data: convs, error: convError } = await supabase
       .from("messaging_conversations")
-      .select(`
+      .select(
+        `
         *,
         messaging_conversation_participants(
           user_id,
@@ -184,7 +196,8 @@ export const getConversations = createServerFn({ method: "GET" })
           last_read_at,
           profiles:user_id(id, full_name, email, role)
         )
-      `)
+      `,
+      )
       .in("id", convIds)
       .order("last_message_at", { ascending: false });
 
@@ -226,10 +239,12 @@ export const getDirectMessages = createServerFn({ method: "GET" })
 
     const { data: messages, error } = await supabase
       .from("messaging_direct_messages")
-      .select(`
+      .select(
+        `
         *,
         sender:sender_id(id, full_name, email, role)
-      `)
+      `,
+      )
       .eq("conversation_id", data.conversationId)
       .order("created_at", { ascending: true });
 
@@ -256,6 +271,42 @@ export const startConversation = createServerFn({ method: "POST" })
       throw new Error("Direct messaging is currently disabled by Operations Configuration policy.");
     }
 
+    const allUserIds = Array.from(new Set([profile.id, ...data.participantUserIds]));
+
+    // Check for existing 1-on-1 thread deduplication when not creating an explicit group
+    if (!data.isGroup && allUserIds.length === 2) {
+      const recipientId = allUserIds.find((id) => id !== profile.id);
+      if (recipientId) {
+        const { data: myConvs } = await supabase
+          .from("messaging_conversation_participants")
+          .select("conversation_id")
+          .eq("user_id", profile.id);
+
+        const convIds = (myConvs || []).map((c: any) => c.conversation_id);
+        if (convIds.length > 0) {
+          const { data: otherConvs } = await supabase
+            .from("messaging_conversation_participants")
+            .select("conversation_id")
+            .eq("user_id", recipientId)
+            .in("conversation_id", convIds);
+
+          const sharedConvIds = (otherConvs || []).map((c: any) => c.conversation_id);
+          if (sharedConvIds.length > 0) {
+            const { data: directConvs } = await supabase
+              .from("messaging_conversations")
+              .select("*")
+              .in("id", sharedConvIds)
+              .eq("is_group", false)
+              .limit(1);
+
+            if (directConvs && directConvs.length > 0) {
+              return directConvs[0];
+            }
+          }
+        }
+      }
+    }
+
     const school = await resolveProvisionedSchool(supabase, profile);
 
     // Create conversation record
@@ -273,7 +324,6 @@ export const startConversation = createServerFn({ method: "POST" })
     if (convErr) throw new Error(`Failed to create conversation: ${convErr.message}`);
 
     // Add current user + requested recipients as participants
-    const allUserIds = Array.from(new Set([profile.id, ...data.participantUserIds]));
     const participantsPayload = allUserIds.map((uid) => ({
       conversation_id: conv.id,
       user_id: uid,

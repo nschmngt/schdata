@@ -31,13 +31,20 @@ export function extractMessagingPolicies(opsRulesRaw: unknown): MessagingPolicie
 }
 
 /** Validates whether a direct message content exceeds the Operations Configuration max length limit. */
-export function validateMessageLength(content: string, maxLen: number): { valid: boolean; length: number; error?: string } {
+export function validateMessageLength(
+  content: string,
+  maxLen: number,
+): { valid: boolean; length: number; error?: string } {
   const len = content.trim().length;
   if (len === 0) {
     return { valid: false, length: 0, error: "Message content cannot be empty." };
   }
   if (len > maxLen) {
-    return { valid: false, length: len, error: `Message exceeds the configured maximum length of ${maxLen} characters (${len}/${maxLen}).` };
+    return {
+      valid: false,
+      length: len,
+      error: `Message exceeds the configured maximum length of ${maxLen} characters (${len}/${maxLen}).`,
+    };
   }
   return { valid: true, length: len };
 }
@@ -47,7 +54,7 @@ export function isAnnouncementActive(
   publishAt: string | Date,
   expireAt?: string | Date | null,
   visibilityDays = 30,
-  now = new Date()
+  now = new Date(),
 ): boolean {
   const pub = new Date(publishAt);
   if (isNaN(pub.getTime()) || pub > now) return false;
@@ -68,7 +75,7 @@ export function isAnnouncementActive(
 export function isUserInAnnouncementAudience(
   userRole: string,
   userClassId: string | null | undefined,
-  announcement: { audience: string; target_role?: string | null; target_class_id?: string | null }
+  announcement: { audience: string; target_role?: string | null; target_class_id?: string | null },
 ): boolean {
   if (userRole === "super_admin" || userRole === "school_manager") return true;
 
@@ -76,17 +83,21 @@ export function isUserInAnnouncementAudience(
   const targetRole = (announcement.target_role || "").toLowerCase();
   const targetClassId = announcement.target_class_id || null;
 
-  if (targetClassId && userClassId) {
-    return targetClassId === userClassId;
+  // If a specific class target is set on the announcement, non-admins must match that class
+  if (targetClassId) {
+    if (!userClassId || targetClassId !== userClassId) {
+      return false;
+    }
   }
 
+  // If a specific role target is set on the announcement, non-admins must match that role
   if (targetRole && targetRole !== userRole.toLowerCase()) {
     return false;
   }
 
   if (audience === "everyone") return true;
   if (audience === "staff" && userRole === "staff") return true;
-  if (audience === "parents" && userRole === "parent") return true;
+  if (audience === "parents" && (userRole === "parent" || userRole === "guardian")) return true;
   if (audience === "students" && userRole === "student") return true;
 
   return audience === userRole.toLowerCase();
@@ -112,12 +123,22 @@ export function calculateMessagingAnalytics(data: {
   const now = data.now || new Date();
 
   const activeAnnouncements = data.announcements.filter(
-    (a) => a.status === "published" && isAnnouncementActive(a.publish_at, a.expire_at, data.policies.announcementVisibilityDays, now)
+    (a) =>
+      a.status === "published" &&
+      isAnnouncementActive(
+        a.publish_at,
+        a.expire_at,
+        data.policies.announcementVisibilityDays,
+        now,
+      ),
   ).length;
 
   const draftAnnouncements = data.announcements.filter((a) => a.status === "draft").length;
 
-  const totalUnreadMessages = data.conversations.reduce((acc, conv) => acc + (conv.unread_count || 0), 0);
+  const totalUnreadMessages = data.conversations.reduce(
+    (acc, conv) => acc + (conv.unread_count || 0),
+    0,
+  );
 
   const priorityDistribution: Record<AnnouncementPriority, number> = {
     low: 0,

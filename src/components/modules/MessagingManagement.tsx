@@ -28,9 +28,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -77,6 +90,7 @@ export function MessagingManagement() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
   const [recipients, setRecipients] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Active DM Thread State
@@ -138,6 +152,7 @@ export function MessagingManagement() {
       ]);
       setPolicies(cfg.policies);
       setUserProfile(cfg.profile);
+      setClasses(cfg.classes || []);
       setAnnouncements(annList);
       setConversations(convList);
       setRecipients(recList);
@@ -165,7 +180,7 @@ export function MessagingManagement() {
         setActiveMessages(msgs);
         await markConvRead({ data: { conversationId: activeConvId } });
         setConversations((prev) =>
-          prev.map((c) => (c.id === activeConvId ? { ...c, unread_count: 0 } : c))
+          prev.map((c) => (c.id === activeConvId ? { ...c, unread_count: 0 } : c)),
         );
       } catch (err: any) {
         toast.error(err.message || "Failed to load messages");
@@ -196,6 +211,7 @@ export function MessagingManagement() {
         content: item.content || "",
         audience: item.audience || "Everyone",
         targetRole: item.target_role || "",
+        targetClassId: item.target_class_id || null,
         priority: item.priority || "normal",
         channels: Array.isArray(item.channels) ? item.channels : ["In-app"],
         attachmentUrl: item.attachment_url || "",
@@ -213,6 +229,7 @@ export function MessagingManagement() {
         content: "",
         audience: "Everyone",
         targetRole: "",
+        targetClassId: null,
         priority: "normal",
         channels: ["In-app"],
         attachmentUrl: "",
@@ -254,7 +271,7 @@ export function MessagingManagement() {
       await markAnnRead({ data: { announcementId: id } });
       toast.success("Marked as read");
       setAnnouncements((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, user_has_read: true } : a))
+        prev.map((a) => (a.id === id ? { ...a, user_has_read: true } : a)),
       );
     } catch (err: any) {
       toast.error(err.message || "Failed to mark as read");
@@ -280,14 +297,24 @@ export function MessagingManagement() {
           content: messageInput.trim(),
         },
       });
-      setActiveMessages((prev) => [...prev, { ...newMsg, sender: { id: userProfile.id, full_name: userProfile.fullName, email: userProfile.email } }]);
+      setActiveMessages((prev) => [
+        ...prev,
+        {
+          ...newMsg,
+          sender: { id: userProfile.id, full_name: userProfile.fullName, email: userProfile.email },
+        },
+      ]);
       setMessageInput("");
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeConvId
-            ? { ...c, last_message_preview: messageInput.slice(0, 80), last_message_at: new Date().toISOString() }
-            : c
-        )
+            ? {
+                ...c,
+                last_message_preview: messageInput.slice(0, 80),
+                last_message_at: new Date().toISOString(),
+              }
+            : c,
+        ),
       );
     } catch (err: any) {
       toast.error(err.message || "Failed to send message");
@@ -377,7 +404,9 @@ export function MessagingManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{analytics.totalConversations}</div>
-                <p className="text-xs text-muted-foreground mt-1">Active 1-on-1 and group threads</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Active 1-on-1 and group threads
+                </p>
               </CardContent>
             </Card>
 
@@ -387,7 +416,9 @@ export function MessagingManagement() {
                 <MessageCircle className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-primary">{analytics.totalUnreadMessages}</div>
+                <div className="text-2xl font-bold text-primary">
+                  {analytics.totalUnreadMessages}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">Pending direct messages</p>
               </CardContent>
             </Card>
@@ -414,7 +445,9 @@ export function MessagingManagement() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Announcement Priority Breakdown</CardTitle>
-                <CardDescription>Distribution of active announcements by urgency level</CardDescription>
+                <CardDescription>
+                  Distribution of active announcements by urgency level
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {ANNOUNCEMENT_PRIORITIES.map((p) => (
@@ -433,12 +466,16 @@ export function MessagingManagement() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Operations Configuration Rules</CardTitle>
-                <CardDescription>Governing settings from System Operations Configuration</CardDescription>
+                <CardDescription>
+                  Governing settings from System Operations Configuration
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between border-b pb-2">
                   <span className="text-muted-foreground">Direct Messages Enabled</span>
-                  <span className="font-semibold">{policies.directMessagesEnabled ? "Yes" : "No"}</span>
+                  <span className="font-semibold">
+                    {policies.directMessagesEnabled ? "Yes" : "No"}
+                  </span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
                   <span className="text-muted-foreground">Max Message Length</span>
@@ -463,22 +500,51 @@ export function MessagingManagement() {
           <Card>
             <CardHeader>
               <CardTitle>Messaging Actions</CardTitle>
-              <CardDescription>Quick actions for announcements and direct messaging</CardDescription>
+              <CardDescription>
+                Quick actions for announcements and direct messaging
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
               {isStaffOrAdmin && (
-                <Button variant="outline" className="h-auto flex-col items-start p-4 text-left space-y-1" onClick={() => handleOpenAnnModal()}>
-                  <span className="font-semibold flex items-center gap-2"><Plus className="size-4" /> Create Internal Announcement</span>
-                  <span className="text-xs text-muted-foreground">Broadcast to school, staff, parents, or students</span>
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col items-start p-4 text-left space-y-1"
+                  onClick={() => handleOpenAnnModal()}
+                >
+                  <span className="font-semibold flex items-center gap-2">
+                    <Plus className="size-4" /> Create Internal Announcement
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Broadcast to school, staff, parents, or students
+                  </span>
                 </Button>
               )}
-              <Button variant="outline" className="h-auto flex-col items-start p-4 text-left space-y-1" onClick={() => { setActiveTab("direct-messages"); setConvModalOpen(true); }}>
-                <span className="font-semibold flex items-center gap-2"><MessageCircle className="size-4" /> Start Direct Message</span>
-                <span className="text-xs text-muted-foreground">Send 1-on-1 message to staff, student, or parent</span>
+              <Button
+                variant="outline"
+                className="h-auto flex-col items-start p-4 text-left space-y-1"
+                onClick={() => {
+                  setActiveTab("direct-messages");
+                  setConvModalOpen(true);
+                }}
+              >
+                <span className="font-semibold flex items-center gap-2">
+                  <MessageCircle className="size-4" /> Start Direct Message
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Send 1-on-1 message to staff, student, or parent
+                </span>
               </Button>
-              <Button variant="outline" className="h-auto flex-col items-start p-4 text-left space-y-1" onClick={() => setActiveTab("configuration")}>
-                <span className="font-semibold flex items-center gap-2"><Sliders className="size-4" /> Review Channel Policies</span>
-                <span className="text-xs text-muted-foreground">Inspect system configuration rules and limits</span>
+              <Button
+                variant="outline"
+                className="h-auto flex-col items-start p-4 text-left space-y-1"
+                onClick={() => setActiveTab("configuration")}
+              >
+                <span className="font-semibold flex items-center gap-2">
+                  <Sliders className="size-4" /> Review Channel Policies
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Inspect system configuration rules and limits
+                </span>
               </Button>
             </CardContent>
           </Card>
@@ -489,7 +555,9 @@ export function MessagingManagement() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-semibold">Internal Announcements</h3>
-              <p className="text-sm text-muted-foreground">Official broadcasts across departments, staff, parents, and students.</p>
+              <p className="text-sm text-muted-foreground">
+                Official broadcasts across departments, staff, parents, and students.
+              </p>
             </div>
             {isStaffOrAdmin && (
               <Button onClick={() => handleOpenAnnModal()} className="gap-2">
@@ -510,21 +578,29 @@ export function MessagingManagement() {
             </div>
 
             <Select value={annAudienceFilter} onValueChange={setAnnAudienceFilter}>
-              <SelectTrigger className="w-[160px] bg-background"><SelectValue placeholder="Audience" /></SelectTrigger>
+              <SelectTrigger className="w-[160px] bg-background">
+                <SelectValue placeholder="Audience" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Audiences</SelectItem>
                 {policies.configuredAudiences.map((aud) => (
-                  <SelectItem key={aud} value={aud}>{aud}</SelectItem>
+                  <SelectItem key={aud} value={aud}>
+                    {aud}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             <Select value={annPriorityFilter} onValueChange={setAnnPriorityFilter}>
-              <SelectTrigger className="w-[140px] bg-background"><SelectValue placeholder="Priority" /></SelectTrigger>
+              <SelectTrigger className="w-[140px] bg-background">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Priorities</SelectItem>
                 {ANNOUNCEMENT_PRIORITIES.map((p) => (
-                  <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                  <SelectItem key={p} value={p} className="capitalize">
+                    {p}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -532,53 +608,90 @@ export function MessagingManagement() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredAnnouncements.map((ann) => {
-              const active = isAnnouncementActive(ann.publish_at, ann.expire_at, policies.announcementVisibilityDays);
+              const active = isAnnouncementActive(
+                ann.publish_at,
+                ann.expire_at,
+                policies.announcementVisibilityDays,
+              );
               return (
                 <Card key={ann.id} className="flex flex-col justify-between">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between gap-2">
-                      <Badge variant="outline" className={PRIORITY_BADGE_CLASSES[ann.priority as keyof typeof PRIORITY_BADGE_CLASSES] || ""}>
+                      <Badge
+                        variant="outline"
+                        className={
+                          PRIORITY_BADGE_CLASSES[
+                            ann.priority as keyof typeof PRIORITY_BADGE_CLASSES
+                          ] || ""
+                        }
+                      >
                         {ann.priority}
                       </Badge>
                       <div className="flex items-center gap-1">
-                        {ann.is_pinned && <Pin className="size-3.5 text-amber-500 fill-amber-500" />}
+                        {ann.is_pinned && (
+                          <Pin className="size-3.5 text-amber-500 fill-amber-500" />
+                        )}
                         <Badge variant={ann.status === "published" ? "default" : "secondary"}>
                           {ann.status}
                         </Badge>
                       </div>
                     </div>
                     <CardTitle className="text-base mt-2 line-clamp-1">{ann.title}</CardTitle>
-                    <CardDescription className="line-clamp-2">{ann.summary || ann.content}</CardDescription>
+                    <CardDescription className="line-clamp-2">
+                      {ann.summary || ann.content}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-3">
                     <div className="text-xs text-muted-foreground flex flex-col gap-1 border-t pt-2">
                       <div className="flex justify-between">
-                        <span>Audience: <strong>{ann.audience}</strong></span>
+                        <span>
+                          Audience: <strong>{ann.audience}</strong>
+                        </span>
                         <span>Published: {new Date(ann.publish_at).toLocaleDateString()}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Channels: {Array.isArray(ann.channels) ? ann.channels.join(", ") : "In-app"}</span>
+                        <span>
+                          Channels:{" "}
+                          {Array.isArray(ann.channels) ? ann.channels.join(", ") : "In-app"}
+                        </span>
                         <span>Reads: {ann.read_count || 0}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t">
-                      <span className={`text-xs font-medium ${active ? "text-emerald-600" : "text-muted-foreground"}`}>
+                      <span
+                        className={`text-xs font-medium ${active ? "text-emerald-600" : "text-muted-foreground"}`}
+                      >
                         {active ? "Active" : "Expired / Scheduled"}
                       </span>
 
                       <div className="flex items-center gap-1">
                         {!ann.user_has_read && (
-                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => handleMarkAnnRead(ann.id)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => handleMarkAnnRead(ann.id)}
+                          >
                             <CheckCircle2 className="size-3" /> Mark Read
                           </Button>
                         )}
                         {isStaffOrAdmin && (
                           <>
-                            <Button variant="ghost" size="icon" className="size-7" onClick={() => handleOpenAnnModal(ann)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={() => handleOpenAnnModal(ann)}
+                            >
                               <Edit2 className="size-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="size-7" onClick={() => handleDeleteAnn(ann.id)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={() => handleDeleteAnn(ann.id)}
+                            >
                               <Trash2 className="size-3.5 text-destructive" />
                             </Button>
                           </>
@@ -598,9 +711,13 @@ export function MessagingManagement() {
             <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3">
               <AlertTriangle className="size-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-bold text-amber-800 dark:text-amber-400">Direct Messaging Disabled</h4>
+                <h4 className="font-bold text-amber-800 dark:text-amber-400">
+                  Direct Messaging Disabled
+                </h4>
                 <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                  Direct messages have been turned off by System Operations Configuration policy. Existing conversation history remains readable, but new messages cannot be sent until enabled in Operations Configuration.
+                  Direct messages have been turned off by System Operations Configuration policy.
+                  Existing conversation history remains readable, but new messages cannot be sent
+                  until enabled in Operations Configuration.
                 </p>
               </div>
             </div>
@@ -614,7 +731,12 @@ export function MessagingManagement() {
                   <MessagesSquare className="size-4" /> Conversations
                 </h4>
                 {policies.directMessagesEnabled && (
-                  <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs" onClick={() => setConvModalOpen(true)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => setConvModalOpen(true)}
+                  >
                     <Plus className="size-3.5" /> New
                   </Button>
                 )}
@@ -628,7 +750,9 @@ export function MessagingManagement() {
                 ) : (
                   conversations.map((c) => {
                     const active = c.id === activeConvId;
-                    const otherParticipant = c.participants?.find((p: any) => p.id !== userProfile?.id);
+                    const otherParticipant = c.participants?.find(
+                      (p: any) => p.id !== userProfile?.id,
+                    );
                     const title = c.title || otherParticipant?.fullName || "Direct Message";
 
                     return (
@@ -646,10 +770,15 @@ export function MessagingManagement() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{c.last_message_preview || "No messages yet"}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {c.last_message_preview || "No messages yet"}
+                          </p>
                         </div>
                         {c.unread_count > 0 && (
-                          <Badge variant="default" className="size-5 p-0 flex items-center justify-center rounded-full text-[10px]">
+                          <Badge
+                            variant="default"
+                            className="size-5 p-0 flex items-center justify-center rounded-full text-[10px]"
+                          >
                             {c.unread_count}
                           </Badge>
                         )}
@@ -667,10 +796,14 @@ export function MessagingManagement() {
                   <div className="p-3 border-b flex items-center justify-between bg-muted/30">
                     <div>
                       <h4 className="font-semibold text-sm">
-                        {activeConv.title || activeConv.participants?.find((p: any) => p.id !== userProfile?.id)?.fullName || "Direct Message"}
+                        {activeConv.title ||
+                          activeConv.participants?.find((p: any) => p.id !== userProfile?.id)
+                            ?.fullName ||
+                          "Direct Message"}
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        Participants: {activeConv.participants?.map((p: any) => p.fullName).join(", ")}
+                        Participants:{" "}
+                        {activeConv.participants?.map((p: any) => p.fullName).join(", ")}
                       </p>
                     </div>
                   </div>
@@ -679,13 +812,23 @@ export function MessagingManagement() {
                     {activeMessages.map((msg) => {
                       const isMe = msg.sender_id === userProfile?.id;
                       return (
-                        <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+                        >
                           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
                             <span>{isMe ? "You" : msg.sender?.full_name || "User"}</span>
                             <span>·</span>
-                            <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                            <span>
+                              {new Date(msg.created_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
                           </div>
-                          <div className={`p-3 rounded-2xl max-w-[80%] text-sm ${isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-muted rounded-tl-none"}`}>
+                          <div
+                            className={`p-3 rounded-2xl max-w-[80%] text-sm ${isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-muted rounded-tl-none"}`}
+                          >
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                             {msg.attachment_url && (
                               <a
@@ -694,7 +837,8 @@ export function MessagingManagement() {
                                 rel="noreferrer"
                                 className="mt-2 text-xs flex items-center gap-1 underline"
                               >
-                                <Paperclip className="size-3" /> {msg.attachment_name || "Attachment"}
+                                <Paperclip className="size-3" />{" "}
+                                {msg.attachment_name || "Attachment"}
                               </a>
                             )}
                           </div>
@@ -707,18 +851,34 @@ export function MessagingManagement() {
                     <div className="flex gap-2">
                       <Input
                         disabled={!policies.directMessagesEnabled}
-                        placeholder={policies.directMessagesEnabled ? "Type your message..." : "Direct messaging disabled by Operations policy"}
+                        placeholder={
+                          policies.directMessagesEnabled
+                            ? "Type your message..."
+                            : "Direct messaging disabled by Operations policy"
+                        }
                         value={messageInput}
                         onChange={(e) => setMessageInput(e.target.value)}
                         className="bg-background"
                       />
-                      <Button type="submit" disabled={!policies.directMessagesEnabled || !messageInput.trim() || sendingMsg} className="gap-2">
+                      <Button
+                        type="submit"
+                        disabled={
+                          !policies.directMessagesEnabled || !messageInput.trim() || sendingMsg
+                        }
+                        className="gap-2"
+                      >
                         <Send className="size-4" /> Send
                       </Button>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
                       <span>Operations Limit: {policies.maxMessageLength} characters</span>
-                      <span className={messageInput.length > policies.maxMessageLength ? "text-destructive font-bold" : ""}>
+                      <span
+                        className={
+                          messageInput.length > policies.maxMessageLength
+                            ? "text-destructive font-bold"
+                            : ""
+                        }
+                      >
                         {messageInput.length} / {policies.maxMessageLength}
                       </span>
                     </div>
@@ -727,7 +887,9 @@ export function MessagingManagement() {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-muted-foreground space-y-2">
                   <MessagesSquare className="size-10 text-muted-foreground/50" />
-                  <p className="text-sm font-medium">Select a conversation or start a new message thread.</p>
+                  <p className="text-sm font-medium">
+                    Select a conversation or start a new message thread.
+                  </p>
                 </div>
               )}
             </div>
@@ -739,52 +901,80 @@ export function MessagingManagement() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Sliders className="size-5 text-primary" /> Operations & Messaging Configuration Status
+                <Sliders className="size-5 text-primary" /> Operations & Messaging Configuration
+                Status
               </CardTitle>
               <CardDescription>
-                System messaging policies are governed centrally in Operations Configuration under the Operations domain.
+                System messaging policies are governed centrally in Operations Configuration under
+                the Operations domain.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="p-4 rounded-lg border bg-card space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-semibold">Direct Messaging Rule</p>
+                  <p className="text-xs text-muted-foreground uppercase font-semibold">
+                    Direct Messaging Rule
+                  </p>
                   <p className="text-lg font-bold flex items-center gap-2">
                     <Badge variant={policies.directMessagesEnabled ? "default" : "destructive"}>
                       {policies.directMessagesEnabled ? "Active & Enabled" : "Disabled by Policy"}
                     </Badge>
                   </p>
-                  <p className="text-xs text-muted-foreground">Controls 1-on-1 direct chat availability</p>
+                  <p className="text-xs text-muted-foreground">
+                    Controls 1-on-1 direct chat availability
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-lg border bg-card space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-semibold">Max Message Character Limit</p>
-                  <p className="text-2xl font-bold">{policies.maxMessageLength} <span className="text-sm font-normal text-muted-foreground">chars</span></p>
-                  <p className="text-xs text-muted-foreground">Enforced during direct message submission</p>
+                  <p className="text-xs text-muted-foreground uppercase font-semibold">
+                    Max Message Character Limit
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {policies.maxMessageLength}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">chars</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Enforced during direct message submission
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-lg border bg-card space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-semibold">Announcement Visibility</p>
-                  <p className="text-2xl font-bold">{policies.announcementVisibilityDays} <span className="text-sm font-normal text-muted-foreground">days</span></p>
-                  <p className="text-xs text-muted-foreground">Default lifecycle for active broadcasts</p>
+                  <p className="text-xs text-muted-foreground uppercase font-semibold">
+                    Announcement Visibility
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {policies.announcementVisibilityDays}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">days</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Default lifecycle for active broadcasts
+                  </p>
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="p-4 rounded-lg border bg-card space-y-2">
-                  <p className="text-sm font-semibold">Configured Delivery Channels ({policies.configuredChannels.length})</p>
+                  <p className="text-sm font-semibold">
+                    Configured Delivery Channels ({policies.configuredChannels.length})
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {policies.configuredChannels.map((ch) => (
-                      <Badge key={ch} variant="outline">{ch}</Badge>
+                      <Badge key={ch} variant="outline">
+                        {ch}
+                      </Badge>
                     ))}
                   </div>
                 </div>
 
                 <div className="p-4 rounded-lg border bg-card space-y-2">
-                  <p className="text-sm font-semibold">Target Audience Groups ({policies.configuredAudiences.length})</p>
+                  <p className="text-sm font-semibold">
+                    Target Audience Groups ({policies.configuredAudiences.length})
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {policies.configuredAudiences.map((aud) => (
-                      <Badge key={aud} variant="secondary">{aud}</Badge>
+                      <Badge key={aud} variant="secondary">
+                        {aud}
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -793,7 +983,10 @@ export function MessagingManagement() {
               <div className="p-4 rounded-lg bg-muted flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Info className="size-4 shrink-0" />
-                  <span>Administrators can customize messaging limits, channels, and rules on the Operations Configuration page.</span>
+                  <span>
+                    Administrators can customize messaging limits, channels, and rules on the
+                    Operations Configuration page.
+                  </span>
                 </div>
                 <Button variant="outline" size="sm" asChild className="gap-1.5 shrink-0">
                   <Link to="/portal/operations-configuration">
@@ -810,23 +1003,60 @@ export function MessagingManagement() {
       <Dialog open={annModalOpen} onOpenChange={setAnnModalOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingAnn ? "Edit Internal Announcement" : "New Internal Announcement"}</DialogTitle>
-            <DialogDescription>Specify title, content, target audience, priority, and delivery channels.</DialogDescription>
+            <DialogTitle>
+              {editingAnn ? "Edit Internal Announcement" : "New Internal Announcement"}
+            </DialogTitle>
+            <DialogDescription>
+              Specify title, content, target audience, priority, and delivery channels.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveAnn} className="space-y-4">
             <div className="space-y-2">
               <Label>Announcement Title *</Label>
-              <Input required value={annForm.title} onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })} />
+              <Input
+                required
+                value={annForm.title}
+                onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Target Audience</Label>
-                <Select value={annForm.audience} onValueChange={(val) => setAnnForm({ ...annForm, audience: val })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={annForm.audience}
+                  onValueChange={(val) => setAnnForm({ ...annForm, audience: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {policies.configuredAudiences.map((aud) => (
-                      <SelectItem key={aud} value={aud}>{aud}</SelectItem>
+                      <SelectItem key={aud} value={aud}>
+                        {aud}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Target Class (Optional)</Label>
+                <Select
+                  value={annForm.targetClassId || "all"}
+                  onValueChange={(val) =>
+                    setAnnForm({ ...annForm, targetClassId: val === "all" ? null : val })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Classes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Classes</SelectItem>
+                    {classes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -834,11 +1064,18 @@ export function MessagingManagement() {
 
               <div className="space-y-2">
                 <Label>Priority Level</Label>
-                <Select value={annForm.priority} onValueChange={(val: any) => setAnnForm({ ...annForm, priority: val })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={annForm.priority}
+                  onValueChange={(val: any) => setAnnForm({ ...annForm, priority: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {ANNOUNCEMENT_PRIORITIES.map((p) => (
-                      <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                      <SelectItem key={p} value={p} className="capitalize">
+                        {p}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -847,41 +1084,68 @@ export function MessagingManagement() {
 
             <div className="space-y-2">
               <Label>Short Summary</Label>
-              <Textarea rows={2} value={annForm.summary} onChange={(e) => setAnnForm({ ...annForm, summary: e.target.value })} />
+              <Textarea
+                rows={2}
+                value={annForm.summary}
+                onChange={(e) => setAnnForm({ ...annForm, summary: e.target.value })}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Full Announcement Content *</Label>
-              <Textarea rows={4} required value={annForm.content} onChange={(e) => setAnnForm({ ...annForm, content: e.target.value })} />
+              <Textarea
+                rows={4}
+                required
+                value={annForm.content}
+                onChange={(e) => setAnnForm({ ...annForm, content: e.target.value })}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Attachment URL (Optional)</Label>
-                <Input value={annForm.attachmentUrl} onChange={(e) => setAnnForm({ ...annForm, attachmentUrl: e.target.value })} />
+                <Input
+                  value={annForm.attachmentUrl}
+                  onChange={(e) => setAnnForm({ ...annForm, attachmentUrl: e.target.value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Publish Date</Label>
                 <Input
                   type="datetime-local"
-                  value={annForm.publishAt ? new Date(annForm.publishAt).toISOString().slice(0, 16) : ""}
-                  onChange={(e) => setAnnForm({ ...annForm, publishAt: new Date(e.target.value).toISOString() })}
+                  value={
+                    annForm.publishAt ? new Date(annForm.publishAt).toISOString().slice(0, 16) : ""
+                  }
+                  onChange={(e) =>
+                    setAnnForm({ ...annForm, publishAt: new Date(e.target.value).toISOString() })
+                  }
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-6 pt-2">
               <div className="flex items-center gap-2">
-                <Switch id="pin" checked={annForm.isPinned} onCheckedChange={(val) => setAnnForm({ ...annForm, isPinned: val })} />
+                <Switch
+                  id="pin"
+                  checked={annForm.isPinned}
+                  onCheckedChange={(val) => setAnnForm({ ...annForm, isPinned: val })}
+                />
                 <Label htmlFor="pin">Pin Announcement</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Label className="text-xs font-medium">Status:</Label>
-                <Select value={annForm.status} onValueChange={(val: any) => setAnnForm({ ...annForm, status: val })}>
-                  <SelectTrigger className="w-[120px] h-8"><SelectValue /></SelectTrigger>
+                <Select
+                  value={annForm.status}
+                  onValueChange={(val: any) => setAnnForm({ ...annForm, status: val })}
+                >
+                  <SelectTrigger className="w-[120px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {ANNOUNCEMENT_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -889,7 +1153,9 @@ export function MessagingManagement() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAnnModalOpen(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setAnnModalOpen(false)}>
+                Cancel
+              </Button>
               <Button type="submit">Save Announcement</Button>
             </DialogFooter>
           </form>
@@ -901,13 +1167,17 @@ export function MessagingManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Start Direct Message</DialogTitle>
-            <DialogDescription>Select a recipient from staff, parents, or students to start messaging.</DialogDescription>
+            <DialogDescription>
+              Select a recipient from staff, parents, or students to start messaging.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleStartConv} className="space-y-4">
             <div className="space-y-2">
               <Label>Select Recipient *</Label>
               <Select value={selectedRecipientId} onValueChange={setSelectedRecipientId}>
-                <SelectTrigger><SelectValue placeholder="Choose a recipient..." /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a recipient..." />
+                </SelectTrigger>
                 <SelectContent className="max-h-60 overflow-y-auto">
                   {recipients.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
@@ -920,11 +1190,17 @@ export function MessagingManagement() {
 
             <div className="space-y-2">
               <Label>Thread Title (Optional)</Label>
-              <Input placeholder="e.g. Subject discussion" value={convTitle} onChange={(e) => setConvTitle(e.target.value)} />
+              <Input
+                placeholder="e.g. Subject discussion"
+                value={convTitle}
+                onChange={(e) => setConvTitle(e.target.value)}
+              />
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConvModalOpen(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setConvModalOpen(false)}>
+                Cancel
+              </Button>
               <Button type="submit">Start Conversation</Button>
             </DialogFooter>
           </form>
