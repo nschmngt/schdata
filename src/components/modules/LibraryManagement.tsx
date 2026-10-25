@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   getLibraryOverviewStats,
   listLibraryBooks,
+  getLibraryBookDetails,
   saveLibraryBook,
   deleteLibraryBook,
   autoPopulateBorrowerInfo,
@@ -85,6 +86,8 @@ export function LibraryManagement() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedBook, setSelectedBook] = useState<any | null>(null);
+  const [bookDetails, setBookDetails] = useState<any | null>(null);
+  const [loadingBookDetails, setLoadingBookDetails] = useState(false);
   const [isAddBookOpen, setIsAddBookOpen] = useState(false);
   const [isEditingBook, setIsEditingBook] = useState(false);
 
@@ -615,9 +618,25 @@ export function LibraryManagement() {
                       </div>
 
                       <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
-                        <span className="text-muted-foreground">
-                          Total: {book.totalCopies} {book.totalCopies === 1 ? "copy" : "copies"}
-                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              setLoadingBookDetails(true);
+                              setSelectedBook(book);
+                              const details = await getLibraryBookDetails({ data: { id: book.id } });
+                              setBookDetails(details);
+                            } catch (err: any) {
+                              toast.error(err.message || "Failed to load book details");
+                            } finally {
+                              setLoadingBookDetails(false);
+                            }
+                          }}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <Info className="size-3" /> View Details
+                        </Button>
                         <div className="flex items-center gap-1">
                           {book.availableCopies === 0 && (
                             <Button
@@ -1308,6 +1327,108 @@ export function LibraryManagement() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* BOOK DETAILS DIALOG */}
+      <Dialog
+        open={!!selectedBook}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedBook(null);
+            setBookDetails(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedBook?.title}</DialogTitle>
+            <DialogDescription>by {selectedBook?.author}</DialogDescription>
+          </DialogHeader>
+
+          {loadingBookDetails ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="mr-2 size-5 animate-spin" /> Loading details...
+            </div>
+          ) : bookDetails ? (
+            <div className="space-y-4 text-xs">
+              <div className="grid gap-2 sm:grid-cols-2 rounded-md bg-muted p-3">
+                <div>
+                  <span className="text-muted-foreground">Category: </span>
+                  <span className="font-semibold">{bookDetails.book.category}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">ISBN: </span>
+                  <span className="font-semibold">{bookDetails.book.isbn || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Call Number: </span>
+                  <span className="font-semibold">{bookDetails.book.callNumber || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Shelf Location: </span>
+                  <span className="font-semibold">{bookDetails.book.shelfLocation || "N/A"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total Copies: </span>
+                  <span className="font-semibold">{bookDetails.book.totalCopies}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Available On Shelf: </span>
+                  <span className="font-bold text-emerald-600">{bookDetails.book.availableCopies}</span>
+                </div>
+              </div>
+
+              {bookDetails.book.description && (
+                <div>
+                  <p className="font-semibold mb-1 text-muted-foreground uppercase tracking-wide">Synopsis / Description</p>
+                  <p className="rounded bg-muted/50 p-2 text-foreground">{bookDetails.book.description}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="font-semibold mb-1.5 text-muted-foreground uppercase tracking-wide">
+                  Active Loans ({bookDetails.activeLoans.length})
+                </p>
+                {bookDetails.activeLoans.length === 0 ? (
+                  <p className="text-muted-foreground italic">No active loans for this book.</p>
+                ) : (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {bookDetails.activeLoans.map((l: any) => (
+                      <div key={l.id} className="flex justify-between p-2 rounded bg-muted/40 text-xs">
+                        <span>{l.borrower_name} ({l.borrower_identifier || l.borrower_type})</span>
+                        <span className="font-medium text-destructive">Due: {l.due_date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="font-semibold mb-1.5 text-muted-foreground uppercase tracking-wide">
+                  Pending Reservations ({bookDetails.pendingReservations.length})
+                </p>
+                {bookDetails.pendingReservations.length === 0 ? (
+                  <p className="text-muted-foreground italic">No pending hold requests.</p>
+                ) : (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {bookDetails.pendingReservations.map((r: any) => (
+                      <div key={r.id} className="flex justify-between p-2 rounded bg-muted/40 text-xs">
+                        <span>{r.borrower_name}</span>
+                        <Badge variant="outline" className="text-[10px]">Queue</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedBook(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
