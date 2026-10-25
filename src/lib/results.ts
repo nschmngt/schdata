@@ -53,6 +53,29 @@ export interface BroadsheetResult {
   totalStudents: number;
   published: boolean;
   publicationStatus: PublicationStatus;
+  gradeBands: GradeBand[];
+}
+
+/**
+ * Generates an automated principal / administrative remark based on overall academic average.
+ */
+export function generatePrincipalRemark(overallAverage: number, passMark: number = 50): string {
+  if (overallAverage >= 90) {
+    return "An outstanding academic performance! Demonstrates exceptional diligence and intellectual mastery.";
+  }
+  if (overallAverage >= 80) {
+    return "An excellent result. Consistently high standard of academic effort and understanding.";
+  }
+  if (overallAverage >= 70) {
+    return "A very good performance. Shows strong potential and consistent commitment.";
+  }
+  if (overallAverage >= 60) {
+    return "Good effort. Capable of achieving even higher results with continued dedication.";
+  }
+  if (overallAverage >= passMark) {
+    return "Satisfactory progress. Encouraged to focus more attention on areas needing improvement.";
+  }
+  return "Below expectations this term. Close monitoring, guidance, and dedicated study are required.";
 }
 
 /**
@@ -218,6 +241,8 @@ export function calculateBroadsheetMatrix(
   const pubStatus: PublicationStatus = publication?.status ?? "published";
   const isPublished = pubStatus === "published";
 
+  const sortedGradeBands = [...rules.gradeBands].sort((a, b) => b.min - a.min);
+
   return {
     term,
     className,
@@ -228,6 +253,7 @@ export function calculateBroadsheetMatrix(
     totalStudents: studentRows.length,
     published: isPublished,
     publicationStatus: pubStatus,
+    gradeBands: sortedGradeBands,
   };
 }
 
