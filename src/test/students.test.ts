@@ -124,14 +124,28 @@ describe("Students Module - Pure Business Logic & Lifecycle Evaluation", () => {
     expect(summary.examsTaken).toBe(1);
   });
 
-  it("summarises student exeat operations and library rules", () => {
+  it("summarises student exeat operations, library loans, and active reservations", () => {
     const exeatLogs = [{ status: "out", reason: "Medical" }];
     const opsRules = defaultOpsRules();
+    const libraryLoans = [
+      { status: "issued", fine_amount: 0 },
+      { status: "overdue", fine_amount: 5 },
+      { status: "returned", fine_amount: 0 },
+    ];
+    const libraryReservations = [
+      { status: "pending" },
+      { status: "approved" },
+      { status: "cancelled" },
+    ];
 
-    const ops = summariseStudentOperations(exeatLogs, opsRules);
+    const ops = summariseStudentOperations(exeatLogs, opsRules, libraryLoans, libraryReservations);
     expect(ops.currentExeatStatus).toBe("out");
     expect(ops.totalExeats).toBe(1);
     expect(ops.libraryLoanDays).toBe(14);
     expect(ops.libraryMaxLoans).toBe(3);
+    expect(ops.totalLibraryLoans).toBe(3);
+    expect(ops.activeLibraryLoans).toBe(2);
+    expect(ops.overdueLibraryLoans).toBe(1);
+    expect(ops.activeLibraryReservations).toBe(2);
   });
 });

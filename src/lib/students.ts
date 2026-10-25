@@ -152,14 +152,20 @@ export interface StudentOperationsSummary {
   libraryLoanDays: number;
   libraryMaxLoans: number;
   libraryFinePerDay: number;
+  totalLibraryLoans: number;
+  activeLibraryLoans: number;
+  overdueLibraryLoans: number;
+  activeLibraryReservations: number;
 }
 
 /**
- * Summarises student exeat status and library policies from Operations Configuration.
+ * Summarises student exeat status, library loans, reservations, and library policies from Operations Configuration.
  */
 export function summariseStudentOperations(
   exeatLogs: Array<Record<string, unknown>>,
   opsRules: OpsRules,
+  libraryLoans: Array<{ status?: string; fine_amount?: number | string | null }> = [],
+  libraryReservations: Array<{ status?: string }> = [],
 ): StudentOperationsSummary {
   const lastExeat = exeatLogs[0] ?? null;
   const currentExeatStatus = lastExeat && lastExeat["status"] === "out" ? "out" : "in_school";
@@ -168,6 +174,19 @@ export function summariseStudentOperations(
   const maxLoans = Number(opsValue(opsRules, "library", "max-loans") ?? 3);
   const finePerDay = Number(opsValue(opsRules, "library", "fine-per-day") ?? 1);
 
+  let activeLibraryLoans = 0;
+  let overdueLibraryLoans = 0;
+  for (const loan of libraryLoans) {
+    if (loan.status === "issued") {
+      activeLibraryLoans++;
+    } else if (loan.status === "overdue") {
+      activeLibraryLoans++;
+      overdueLibraryLoans++;
+    }
+  }
+
+  const activeLibraryReservations = libraryReservations.filter((r) => r.status === "pending" || r.status === "approved").length;
+
   return {
     currentExeatStatus,
     totalExeats: exeatLogs.length,
@@ -175,5 +194,9 @@ export function summariseStudentOperations(
     libraryLoanDays: loanDays,
     libraryMaxLoans: maxLoans,
     libraryFinePerDay: finePerDay,
+    totalLibraryLoans: libraryLoans.length,
+    activeLibraryLoans,
+    overdueLibraryLoans,
+    activeLibraryReservations,
   };
 }

@@ -200,6 +200,8 @@ export const getStudentFullDetail = createServerFn({ method: "POST" })
       attendanceRes,
       feesRes,
       exeatRes,
+      libraryLoansRes,
+      libraryReservationsRes,
       assignmentsRes,
       lessonsRes,
       examsRes,
@@ -217,6 +219,8 @@ export const getStudentFullDetail = createServerFn({ method: "POST" })
       supabase.from("student_attendance").select("*").eq("admission_id", data.id).order("attendance_date", { ascending: false }).limit(5000),
       supabase.from("student_fees").select("*").eq("admission_id", data.id).order("due_date", { ascending: false }),
       supabase.from("student_exeat").select("*").eq("admission_id", data.id).order("created_at", { ascending: false }).limit(50),
+      supabase.from("library_loans").select("*, library_books(title, accession_number, author)").eq("borrower_admission_id", data.id).order("issued_at", { ascending: false }),
+      supabase.from("library_reservations").select("*, library_books(title, author)").eq("borrower_admission_id", data.id).order("reserved_at", { ascending: false }),
       supabase.from("assignment_submissions").select("id, assignment_id, final_score, submitted_at, graded_at").eq("admission_id", data.id),
       admission.student_profile_id
         ? supabase.from("lesson_completions").select("id, lesson_id, quiz_score, completed_at").eq("student_id", admission.student_profile_id)
@@ -270,7 +274,15 @@ export const getStudentFullDetail = createServerFn({ method: "POST" })
     const financialSummary = summariseStudentFinance(feesList as any[]);
 
     const exeatList = (exeatRes.data ?? []) as Array<Record<string, unknown>>;
-    const operationsSummary = summariseStudentOperations(exeatList, opsRules);
+    const libraryLoansList = (libraryLoansRes.data ?? []) as Array<Record<string, unknown>>;
+    const libraryReservationsList = (libraryReservationsRes.data ?? []) as Array<Record<string, unknown>>;
+
+    const operationsSummary = summariseStudentOperations(
+      exeatList,
+      opsRules,
+      libraryLoansList as any,
+      libraryReservationsList as any,
+    );
 
     const lifecycle = evaluateStudentLifecycle(
       academicSummary.averageScore,
@@ -291,6 +303,8 @@ export const getStudentFullDetail = createServerFn({ method: "POST" })
       fees: feesList,
       financialSummary,
       exeatLogs: exeatList,
+      libraryLoans: libraryLoansList,
+      libraryReservations: libraryReservationsList,
       operationsSummary,
       lifecycle,
       assignments: assignmentsRes.data ?? [],
