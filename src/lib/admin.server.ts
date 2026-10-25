@@ -42,6 +42,17 @@ export async function assertAdmin(supabase: SupabaseClient, userId: string) {
   }
 }
 
+export async function isStaffOrAdmin(supabase: SupabaseClient, userId: string) {
+  const roles = await getRoles(supabase, userId);
+  return roles.some((r) => ADMIN_ROLES.has(r) || r === "staff");
+}
+
+export async function assertStaffOrAdmin(supabase: SupabaseClient, userId: string) {
+  if (!(await isStaffOrAdmin(supabase, userId))) {
+    throw new Error("Forbidden: staff or administrator access required.");
+  }
+}
+
 export async function assertSuperAdmin(supabase: SupabaseClient, userId: string) {
   if (!(await isSuperAdmin(supabase, userId))) {
     throw new Error("Forbidden: Super Admin access required.");

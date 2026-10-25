@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertAdmin, logAudit } from "@/lib/admin.server";
+import { assertStaffOrAdmin, isStaffOrAdmin, logAudit } from "@/lib/admin.server";
 import { resolveProvisionedSchool } from "@/lib/school.server";
 import { OPS_FEATURE_KEY, parseOpsRules } from "@/lib/operations-rules";
 import {
@@ -15,6 +15,8 @@ import {
   bookInputSchema,
   borrowerSearchSchema,
   issueLoanInputSchema,
+  listBooksInputSchema,
+  listLoansInputSchema,
   loanIdSchema,
   payFineInputSchema,
   renewLoanInputSchema,
@@ -39,11 +41,22 @@ export const getLibraryOverviewStats = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
+    const school = await resolveProvisionedSchool(supabase);
+
+    let booksQuery = supabase.from("library_books").select("id, total_copies, available_copies, status");
+    let loansQuery = supabase.from("library_loans").select("id, status, fine_amount, fine_paid, due_date");
+    let reservationsQuery = supabase.from("library_reservations").select("id, status").eq("status", "pending");
+
+    if (school?.id) {
+      booksQuery = booksQuery.eq("school_id", school.id);
+      loansQuery = loansQuery.eq("school_id", school.id);
+      reservationsQuery = reservationsQuery.eq("school_id", school.id);
+    }
 
     const [booksRes, loansRes, reservationsRes] = await Promise.all([
-      supabase.from("library_books").select("id, total_copies, available_copies, status"),
-      supabase.from("library_loans").select("id, status, fine_amount, fine_paid, due_date"),
-      supabase.from("library_reservations").select("id, status").eq("status", "pending"),
+      booksQuery,
+      loansQuery,
+      reservationsQuery,
     ]);
 
     if (booksRes.error) throw new Error(booksRes.error.message);
@@ -88,17 +101,18 @@ export const getLibraryOverviewStats = createServerFn({ method: "GET" })
 /** List and filter catalogue books. */
 export const listLibraryBooks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    typeof d === "object" && d !== null
-      ? (d as { query?: string; category?: string; status?: string })
-      : {},
-  )
+  .inputValidator((d: unknown) => listBooksInputSchema.parse(d ?? {}))
   .handler(async ({ data, context }) => {
+    const school = await resolveProvisionedSchool(context.supabase);
+
     let q = context.supabase
       .from("library_books")
       .select("*")
       .order("title", { ascending: true });
 
+    if (school?.id) {
+      q = q.eq("school_id", school.id);
+    }
     if (data.status && data.status !== "all") {
       q = q.eq("status", data.status);
     }
@@ -146,20 +160,32 @@ export const getLibraryBookDetails = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => bookIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    const school = await resolveProvisionedSchool(context.supabase);
+
+    let bookQuery = context.supabase.from("library_books").select("*").eq("id", data.id);
+    let loansQuery = context.supabase
+      .from("library_loans")
+      .select("*")
+      .eq("book_id", data.id)
+      .in("status", ["issued", "overdue"])
+      .order("due_date", { ascending: true });
+    let reservationsQuery = context.supabase
+      .from("library_reservations")
+      .select("*")
+      .eq("book_id", data.id)
+      .eq("status", "pending")
+      .order("reservation_date", { ascending: true });
+
+    if (school?.id) {
+      bookQuery = bookQuery.eq("school_id", school.id);
+      loansQuery = loansQuery.eq("school_id", school.id);
+      reservationsQuery = reservationsQuery.eq("school_id", school.id);
+    }
+
     const [bookRes, loansRes, reservationsRes] = await Promise.all([
-      context.supabase.from("library_books").select("*").eq("id", data.id).single(),
-      context.supabase
-        .from("library_loans")
-        .select("*")
-        .eq("book_id", data.id)
-        .in("status", ["issued", "overdue"])
-        .order("due_date", { ascending: true }),
-      context.supabase
-        .from("library_reservations")
-        .select("*")
-        .eq("book_id", data.id)
-        .eq("status", "pending")
-        .order("reservation_date", { ascending: true }),
+      bookQuery.single(),
+      loansQuery,
+      reservationsQuery,
     ]);
 
     if (bookRes.error || !bookRes.data) throw new Error("Book not found.");
@@ -192,6 +218,7 @@ export const saveLibraryBook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => bookInputSchema.parse(d))
   .handler(async ({ data, context }) => {
+    await assertStaffOrAdmin(context.supabase, context.userId);
     const school = await resolveProvisionedSchool(context.supabase);
 
     const row = {
@@ -243,6 +270,7 @@ export const deleteLibraryBook = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => bookIdSchema.parse(d))
   .handler(async ({ data, context }) => {
+    await assertStaffOrAdmin(context.supabase, context.userId);
     const { data: book } = await context.supabase
       .from("library_books")
       .select("title")
@@ -271,6 +299,7 @@ export const autoPopulateBorrowerInfo = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => borrowerSearchSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    const school = await resolveProvisionedSchool(supabase);
     const opsRules = await loadOpsRules(supabase);
     const policies = getLibraryPolicies(opsRules);
 
@@ -284,11 +313,17 @@ export const autoPopulateBorrowerInfo = createServerFn({ method: "GET" })
 
     // Search students (admissions + student_fees + active library_loans)
     if (data.borrowerType === "student" || data.borrowerType === "all") {
-      const { data: admissions } = await supabase
+      let admissionsQuery = supabase
         .from("admissions")
         .select("id, student_name, admission_number, class_admitted, status, parent_email, student_profile_id")
         .or(`student_name.ilike.%${term}%,admission_number.ilike.%${term}%,parent_email.ilike.%${term}%`)
         .limit(10);
+
+      if (school?.id) {
+        admissionsQuery = admissionsQuery.eq("school_id", school.id);
+      }
+
+      const { data: admissions } = await admissionsQuery;
 
       if (admissions && admissions.length > 0) {
         const admissionIds = admissions.map((a) => a.id);
@@ -389,21 +424,28 @@ export const autoPopulateBorrowerInfo = createServerFn({ method: "GET" })
 /** List and filter library loans (active, overdue, returned, lost). */
 export const listLibraryLoans = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    typeof d === "object" && d !== null
-      ? (d as { status?: string; borrowerQuery?: string; bookQuery?: string })
-      : {},
-  )
+  .inputValidator((d: unknown) => listLoansInputSchema.parse(d ?? {}))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    const school = await resolveProvisionedSchool(supabase);
     const opsRules = await loadOpsRules(supabase);
     const policies = getLibraryPolicies(opsRules);
     const todayStr = new Date().toISOString().split("T")[0];
+
+    const isStaffOrAdminUser = await isStaffOrAdmin(supabase, context.userId);
 
     let q = supabase
       .from("library_loans")
       .select("*, library_books(id, title, author, isbn, call_number)")
       .order("created_at", { ascending: false });
+
+    if (school?.id) {
+      q = q.eq("school_id", school.id);
+    }
+
+    if (!isStaffOrAdminUser) {
+      q = q.eq("borrower_profile_id", context.userId);
+    }
 
     if (data.status && data.status !== "all") {
       q = q.eq("status", data.status);
@@ -412,7 +454,29 @@ export const listLibraryLoans = createServerFn({ method: "GET" })
     const { data: loans, error } = await q;
     if (error) throw new Error(error.message);
 
-    return (loans ?? []).map((l: any) => {
+    let filtered = loans ?? [];
+
+    if (data.borrowerQuery) {
+      const term = data.borrowerQuery.toLowerCase().trim();
+      filtered = filtered.filter(
+        (l: any) =>
+          (l.borrower_name || "").toLowerCase().includes(term) ||
+          (l.borrower_identifier || "").toLowerCase().includes(term) ||
+          (l.class_name || "").toLowerCase().includes(term),
+      );
+    }
+
+    if (data.bookQuery) {
+      const term = data.bookQuery.toLowerCase().trim();
+      filtered = filtered.filter(
+        (l: any) =>
+          (l.library_books?.title || "").toLowerCase().includes(term) ||
+          (l.library_books?.author || "").toLowerCase().includes(term) ||
+          (l.library_books?.isbn || "").toLowerCase().includes(term),
+      );
+    }
+
+    return filtered.map((l: any) => {
       let isOverdue = l.status === "overdue" || (l.status === "issued" && l.due_date < todayStr);
       let fineAmount = Number(l.fine_amount || 0);
 
@@ -455,6 +519,7 @@ export const issueLibraryLoan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => issueLoanInputSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    await assertStaffOrAdmin(supabase, context.userId);
     const school = await resolveProvisionedSchool(supabase);
     const opsRules = await loadOpsRules(supabase);
     const policies = getLibraryPolicies(opsRules);
@@ -539,6 +604,7 @@ export const returnLibraryLoan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => returnLoanInputSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    await assertStaffOrAdmin(supabase, context.userId);
     const opsRules = await loadOpsRules(supabase);
     const policies = getLibraryPolicies(opsRules);
 
@@ -633,6 +699,7 @@ export const payLoanFine = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => payFineInputSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    await assertStaffOrAdmin(supabase, context.userId);
 
     const { data: loan, error: loanErr } = await supabase
       .from("library_loans")
@@ -662,10 +729,24 @@ export const payLoanFine = createServerFn({ method: "POST" })
 export const listLibraryReservations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { supabase } = context;
+    const school = await resolveProvisionedSchool(supabase);
+    const isStaffOrAdminUser = await isStaffOrAdmin(supabase, context.userId);
+
+    let q = supabase
       .from("library_reservations")
       .select("*, library_books(id, title, author, available_copies)")
       .order("reservation_date", { ascending: true });
+
+    if (school?.id) {
+      q = q.eq("school_id", school.id);
+    }
+
+    if (!isStaffOrAdminUser) {
+      q = q.eq("borrower_profile_id", context.userId);
+    }
+
+    const { data, error } = await q;
 
     if (error) throw new Error(error.message);
 
@@ -690,6 +771,7 @@ export const reserveLibraryBook = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const school = await resolveProvisionedSchool(supabase);
+    const isStaffOrAdminUser = await isStaffOrAdmin(supabase, context.userId);
 
     const { data: book, error: bookErr } = await supabase
       .from("library_books")
@@ -699,11 +781,15 @@ export const reserveLibraryBook = createServerFn({ method: "POST" })
 
     if (bookErr || !book) throw new Error("Book not found.");
 
+    const borrowerProfileId = isStaffOrAdminUser
+      ? data.borrowerProfileId || context.userId
+      : context.userId;
+
     const row = {
       school_id: school?.id,
       book_id: data.bookId,
-      borrower_profile_id: data.borrowerProfileId || null,
-      borrower_admission_id: data.borrowerAdmissionId || null,
+      borrower_profile_id: borrowerProfileId,
+      borrower_admission_id: isStaffOrAdminUser ? data.borrowerAdmissionId || null : null,
       borrower_name: data.borrowerName,
       status: "pending",
     };
@@ -731,6 +817,19 @@ export const cancelLibraryReservation = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => reservationIdSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    const isStaffOrAdminUser = await isStaffOrAdmin(supabase, context.userId);
+
+    const { data: reservation, error: resErr } = await supabase
+      .from("library_reservations")
+      .select("id, borrower_profile_id")
+      .eq("id", data.id)
+      .single();
+
+    if (resErr || !reservation) throw new Error("Reservation not found.");
+
+    if (!isStaffOrAdminUser && reservation.borrower_profile_id !== context.userId) {
+      throw new Error("Forbidden: you cannot cancel reservations belonging to another user.");
+    }
 
     const { error } = await supabase
       .from("library_reservations")

@@ -6,6 +6,8 @@ import {
   renewLoanInputSchema,
   borrowerSearchSchema,
   reserveBookInputSchema,
+  listBooksInputSchema,
+  listLoansInputSchema,
 } from "../lib/library.schemas";
 import {
   calculateDueDate,
@@ -47,6 +49,37 @@ describe("Library Module - Schema Validations", () => {
     ).toThrow();
   });
 
+  it("rejects book input when available copies exceed total copies", () => {
+    expect(() =>
+      bookInputSchema.parse({
+        title: "Advanced Physics",
+        author: "H. O. David",
+        totalCopies: 3,
+        availableCopies: 5,
+      }),
+    ).toThrow("Available copies cannot exceed total copies");
+  });
+
+  it("validates list books input schema defaults", () => {
+    const valid = listBooksInputSchema.parse({});
+    expect(valid.query).toBe("");
+    expect(valid.category).toBe("all");
+    expect(valid.status).toBe("all");
+  });
+
+  it("validates list loans input schema defaults", () => {
+    const valid = listLoansInputSchema.parse({});
+    expect(valid.status).toBe("all");
+    expect(valid.borrowerQuery).toBe("");
+    expect(valid.bookQuery).toBe("");
+  });
+
+  it("validates borrower search schema defaults", () => {
+    const valid = borrowerSearchSchema.parse({ query: "John" });
+    expect(valid.query).toBe("John");
+    expect(valid.borrowerType).toBe("all");
+  });
+
   it("validates loan issue input schema", () => {
     const valid = issueLoanInputSchema.parse({
       bookId: "11111111-2222-3333-4444-555555555555",
@@ -60,6 +93,18 @@ describe("Library Module - Schema Validations", () => {
 
     expect(valid.borrowerType).toBe("student");
     expect(valid.className).toBe("Basic 7");
+  });
+
+  it("rejects loan issue when due date is prior to issue date", () => {
+    expect(() =>
+      issueLoanInputSchema.parse({
+        bookId: "11111111-2222-3333-4444-555555555555",
+        borrowerType: "student",
+        borrowerName: "John Doe",
+        issueDate: "2025-03-15",
+        dueDate: "2025-03-01",
+      }),
+    ).toThrow("Due date cannot be prior to issue date");
   });
 
   it("validates return loan input schema", () => {
