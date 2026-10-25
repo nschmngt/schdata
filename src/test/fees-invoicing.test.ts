@@ -209,4 +209,14 @@ describe("Fees & Invoicing - Billing Run Simulation", () => {
     expect(preview.targetStudentCount).toBe(1);
     expect(preview.estimatedTotalBilled).toBe(500);
   });
+
+  it("computes dry-run preview filtered by education level", () => {
+    const previewPrimary = computeBillingRunPreview(students, structures, "education_level", "PRIMARY");
+    expect(previewPrimary.targetStudentCount).toBe(2);
+    expect(previewPrimary.estimatedTotalBilled).toBe(1000);
+
+    const previewJhs = computeBillingRunPreview(students, structures, "education_level", "JHS");
+    expect(previewJhs.targetStudentCount).toBe(1);
+    expect(previewJhs.estimatedTotalBilled).toBe(500);
+  });
 });
