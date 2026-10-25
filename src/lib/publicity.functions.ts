@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { resolveProvisionedSchool } from "@/lib/school.server";
+import { OPS_FEATURE_KEY, parseOpsRules } from "@/lib/operations-rules";
 import {
   noticeSchema,
   circularSchema,
@@ -10,6 +11,16 @@ import {
 } from "./publicity.schemas";
 import { z } from "zod";
 import { calculatePublicityAnalytics } from "./publicity";
+
+export async function loadOpsRules(supabase: any) {
+  const { data } = await supabase
+    .from("tenant_settings")
+    .select("features")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return parseOpsRules(data?.features?.[OPS_FEATURE_KEY]);
+}
 
 // ----------------------------------------------------------------------
 // NOTICES
