@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useSession } from "@/hooks/useSession";
 import { useSchoolName } from "@/hooks/useSchoolName";
+import { useSchoolClasses } from "@/hooks/useSchoolClasses";
+import { useSubjectOptions } from "@/hooks/useSubjectOptions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +59,7 @@ import {
   deleteLesson,
   completeLesson,
   listAvailableQuizzes,
+  getMyTeachingScope,
 } from "@/lib/lessons.functions";
 import { submitExamAnswers, startExamAttempt } from "@/lib/exams.functions";
 import { parseVideoUrl } from "@/lib/lessons";
@@ -65,6 +68,9 @@ import type { QuestionInput } from "@/lib/exams.schemas";
 export function LessonsManagement() {
   const { profile } = useSession();
   const school = useSchoolName();
+  const schoolClasses = useSchoolClasses();
+  const subjectOptions = useSubjectOptions();
+
   const isStaffOrAdmin =
     profile?.role === "super_admin" ||
     profile?.role === "school_manager" ||
@@ -72,6 +78,13 @@ export function LessonsManagement() {
 
   const [lessons, setLessons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teachingScope, setTeachingScope] = useState<{
+    isAdmin: boolean;
+    classes: string[];
+    subjects: string[];
+    pairs: { class_name: string; subject: string }[];
+  } | null>(null);
+
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [selectedSubject, setSelectedSubject] = useState<string>("all");
   const [activeLesson, setActiveLesson] = useState<any | null>(null);
@@ -115,14 +128,20 @@ export function LessonsManagement() {
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
   useEffect(() => {
-    fetchLessons();
+    fetchLessonsAndScope();
   }, []);
 
-  async function fetchLessons() {
+  async function fetchLessonsAndScope() {
     setLoading(true);
     try {
-      const data = await listLessons();
-      setLessons(data);
+      const [lessonsData, scopeData] = await Promise.all([
+        listLessons(),
+        isStaffOrAdmin ? getMyTeachingScope().catch(() => null) : Promise.resolve(null),
+      ]);
+      setLessons(lessonsData);
+      if (scopeData) {
+        setTeachingScope(scopeData);
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to load lessons");
     } finally {
@@ -130,9 +149,43 @@ export function LessonsManagement() {
     }
   }
 
-  // Extract unique classes & subjects for filter auto-population
-  const availableClasses = [...new Set(lessons.map((l) => l.class_name))].filter(Boolean).sort();
-  const availableSubjects = [...new Set(lessons.map((l) => l.subject))].filter(Boolean).sort();
+  // Combine system config classes with teacher scope & lessons
+  const availableClasses = Array.from(
+    new Set([
+      ...schoolClasses.names,
+      ...(teachingScope?.classes || []),
+      ...lessons.map((l) => l.class_name),
+    ]),
+  )
+    .filter(Boolean)
+    .sort();
+
+  // Combine system config subjects with teacher scope & lessons
+  const availableSubjects = Array.from(
+    new Set([
+      ...subjectOptions.subjects,
+      ...(teachingScope?.subjects || []),
+      ...lessons.map((l) => l.subject),
+    ]),
+  )
+    .filter(Boolean)
+    .sort();
+
+  // Filter class dropdown options for creation form based on teaching scope if non-admin teacher
+  const formClassesOptions =
+    isStaffOrAdmin && teachingScope && !teachingScope.isAdmin && teachingScope.classes.length > 0
+      ? teachingScope.classes
+      : availableClasses;
+
+  // Filter subject dropdown options for creation form based on teaching scope and selected form class
+  const formSubjectsOptions =
+    isStaffOrAdmin && teachingScope && !teachingScope.isAdmin && teachingScope.pairs.length > 0
+      ? formClassName
+        ? teachingScope.pairs
+            .filter((p) => p.class_name.toLowerCase() === formClassName.trim().toLowerCase())
+            .map((p) => p.subject)
+        : teachingScope.subjects
+      : availableSubjects;
 
   const filteredLessons = lessons.filter((l) => {
     const classMatch = selectedClass === "all" || l.class_name === selectedClass;
@@ -145,6 +198,10 @@ export function LessonsManagement() {
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   async function handleOpenCreate(lessonToEdit?: any) {
+    const defaultClass = formClassesOptions[0] || availableClasses[0] || "Primary 1";
+    const defaultSubject =
+      formSubjectsOptions[0] || availableSubjects[0] || "Mathematics";
+
     if (lessonToEdit) {
       setFormId(lessonToEdit.id);
       setFormTitle(lessonToEdit.title);
@@ -162,8 +219,8 @@ export function LessonsManagement() {
       setFormTitle("");
       setFormDescription("");
       setFormContent("");
-      setFormClassName(availableClasses[0] || "Primary 1");
-      setFormSubject(availableSubjects[0] || "Mathematics");
+      setFormClassName(defaultClass);
+      setFormSubject(defaultSubject);
       setFormTerm("Term 1");
       setFormIntroVideoUrl("");
       setFormStatus("draft");
@@ -171,12 +228,14 @@ export function LessonsManagement() {
       setFormQuizId(null);
     }
 
-    // Load subject quizzes if class and subject are set
-    if (formClassName || availableClasses[0]) {
+    const cls = lessonToEdit?.class_name || defaultClass;
+    const subj = lessonToEdit?.subject || defaultSubject;
+
+    if (cls && subj) {
       try {
         const quizzes = await listAvailableQuizzes({
-          className: lessonToEdit?.class_name || availableClasses[0] || "",
-          subject: lessonToEdit?.subject || availableSubjects[0] || "",
+          className: cls,
+          subject: subj,
         });
         setAvailableQuizzes(quizzes);
       } catch (e) {
@@ -678,20 +737,51 @@ export function LessonsManagement() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Class Name *</Label>
-                <Input
+                <Select
                   value={formClassName}
-                  onChange={(e) => handleClassOrSubjectChange(e.target.value, formSubject)}
-                  placeholder="e.g. Primary 1"
-                />
+                  onValueChange={(val) => {
+                    const newSubjOptions =
+                      isStaffOrAdmin && teachingScope && !teachingScope.isAdmin && teachingScope.pairs.length > 0
+                        ? teachingScope.pairs
+                            .filter((p) => p.class_name.toLowerCase() === val.trim().toLowerCase())
+                            .map((p) => p.subject)
+                        : availableSubjects;
+                    const nextSubject = newSubjOptions.includes(formSubject)
+                      ? formSubject
+                      : newSubjOptions[0] || formSubject;
+                    handleClassOrSubjectChange(val, nextSubject);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formClassesOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <Label>Subject *</Label>
-                <Input
+                <Select
                   value={formSubject}
-                  onChange={(e) => handleClassOrSubjectChange(formClassName, e.target.value)}
-                  placeholder="e.g. Mathematics"
-                />
+                  onValueChange={(val) => handleClassOrSubjectChange(formClassName, val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formSubjectsOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
